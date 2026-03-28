@@ -36,7 +36,6 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
   late ThaNativePlayerController _ctrl;
   Timer? _progressTimer;
   bool _triedFallback = false;
-  bool _isFallbackDialogOpen = false;
   String? _errorMessage;
 
   Duration _position = Duration.zero;
@@ -61,8 +60,6 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
       autoPlay: true,
     );
     _ctrl.playbackState.addListener(_syncPlaybackState);
-    // Listen for errors using correct API
-    _ctrl.errorDetails.addListener(_onPlayerError);
 
     if (widget.startAt != null && widget.startAt! > Duration.zero) {
       Future.delayed(const Duration(seconds: 2), () {
@@ -74,28 +71,8 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
         Timer.periodic(const Duration(seconds: 5), (_) => _saveProgress());
   }
 
-  void _onPlayerError() {
-    final error = _ctrl.errorDetails.value;
-    if (error == null || !mounted) return;
-
-    final errorStr = error.toString();
-    final is4KError = errorStr.contains('EXCEEDS_CAPABILITIES') ||
-        errorStr.contains('NO_EXCEEDS') ||
-        errorStr.contains('3840') ||
-        errorStr.contains('hevc');
-
-    if (is4KError && !_triedFallback && !_isFallbackDialogOpen) {
-      _show4KFallbackDialog();
-    } else {
-      setState(() {
-        _errorMessage = 'Playback error. Please try another stream.';
-      });
-    }
-  }
-
   void _show4KFallbackDialog() {
     if (!mounted) return;
-    _isFallbackDialogOpen = true;
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -113,7 +90,6 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
         actions: [
           TextButton(
             onPressed: () {
-              _isFallbackDialogOpen = false;
               Navigator.of(context).pop();
               Navigator.of(context).pop();
             },
@@ -124,7 +100,6 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
           ),
           ElevatedButton(
             onPressed: () {
-              _isFallbackDialogOpen = false;
               Navigator.of(context).pop();
               unawaited(_retryAt1080p());
             },
@@ -135,9 +110,7 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
           ),
         ],
       ),
-    ).whenComplete(() {
-      _isFallbackDialogOpen = false;
-    });
+    );
   }
 
   Future<void> _retryAt1080p() async {
@@ -146,7 +119,6 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
 
     try {
       _ctrl.playbackState.removeListener(_syncPlaybackState);
-      _ctrl.errorDetails.removeListener(_onPlayerError);
     } catch (_) {}
 
     try {
@@ -172,8 +144,6 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
       autoPlay: true,
     );
     _ctrl.playbackState.addListener(_syncPlaybackState);
-    // Listen for errors using correct API
-    _ctrl.errorDetails.addListener(_onPlayerError);
 
     if (mounted) {
       setState(() {});
@@ -245,7 +215,6 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
     _progressTimer?.cancel();
     unawaited(_saveProgress(force: true));
     _ctrl.playbackState.removeListener(_syncPlaybackState);
-    _ctrl.errorDetails.removeListener(_onPlayerError);
     _ctrl.dispose();
     super.dispose();
   }
@@ -262,51 +231,120 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
       },
       child: Scaffold(
         backgroundColor: Colors.black,
-        body: ThaModernPlayer(
-          controller: _ctrl,
-          doubleTapSeek: const Duration(seconds: 10),
-          autoHideAfter: const Duration(seconds: 3),
-          initialBoxFit: BoxFit.contain,
-          autoFullscreen: true,
-          overlay: SafeArea(
-            child: Stack(
-              children: [
-                if (_errorMessage != null)
-                  Center(
-                    child: Container(
-                      margin: const EdgeInsets.symmetric(horizontal: 24),
-                      padding: const EdgeInsets.all(14),
-                      decoration: BoxDecoration(
-                        color: Colors.black.withValues(alpha: 0.75),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Text(
-                        _errorMessage!,
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 14,
+        body: Stack(
+          children: [
+            ThaModernPlayer(
+              controller: _ctrl,
+              doubleTapSeek: const Duration(seconds: 10),
+              autoHideAfter: const Duration(seconds: 3),
+              initialBoxFit: BoxFit.contain,
+              autoFullscreen: true,
+              onError: (error) {
+                if (!mounted) return;
+                final is4KError = (error ?? '').contains('EXCEEDS') ||
+                    (error ?? '').contains('hevc') ||
+                    (error ?? '').contains('3840');
+                if (is4KError && !_triedFallback) {
+                  _show4KFallbackDialog();
+                } else {
+                  setState(() {
+                    _errorMessage = error ?? 'Playback error';
+                  });
+                }
+              },
+              overlay: Stack(
+                children: [
+                  Positioned(
+                    top: 0,
+                    left: 0,
+                    right: 60,
+                    child: SafeArea(
+                      child: Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Text(
+                          widget.title,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                            shadows: [
+                              Shadow(
+                                color: Colors.black54,
+                                blurRadius: 4,
+                              ),
+                            ],
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
                     ),
                   ),
-                Align(
-                  alignment: Alignment.topRight,
-                  child: IconButton(
-                    icon: const Icon(
-                      Icons.close,
-                      color: Colors.white,
-                      size: 28,
+                  Positioned(
+                    top: 0,
+                    right: 0,
+                    child: SafeArea(
+                      child: IconButton(
+                        icon: const Icon(
+                          Icons.close,
+                          color: Colors.white,
+                          size: 28,
+                        ),
+                        onPressed: () => Navigator.of(context).pop(),
+                      ),
                     ),
-                    onPressed: () {
-                      Navigator.of(context).pop();
-                      Navigator.of(context).pop();
-                    },
+                  ),
+                ],
+              ),
+            ),
+            Positioned(
+              bottom: 8,
+              right: 8,
+              child: SizedBox(
+                width: 48,
+                height: 48,
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () {},
+                ),
+              ),
+            ),
+            if (_errorMessage != null)
+              Positioned.fill(
+                child: Container(
+                  color: Colors.black87,
+                  child: Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(
+                          Icons.error_outline,
+                          color: Colors.red,
+                          size: 64,
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          _errorMessage!,
+                          style: const TextStyle(
+                            color: Colors.white70,
+                            fontSize: 16,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 24),
+                        ElevatedButton(
+                          onPressed: () => Navigator.of(context).pop(),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.red,
+                          ),
+                          child: const Text('Go Back'),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-              ],
-            ),
-          ),
+              ),
+          ],
         ),
       ),
     );
