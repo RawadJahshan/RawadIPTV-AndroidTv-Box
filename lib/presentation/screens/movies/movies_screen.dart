@@ -1,0 +1,151 @@
+import 'package:flutter/material.dart';
+
+import '../../../data/datasources/remote/xtream_api.dart';
+import '../../../data/models/movie_category.dart';
+import 'movie_list_screen.dart';
+
+class MoviesScreen extends StatefulWidget {
+  final XtreamApi xtreamApi;
+
+  const MoviesScreen({super.key, required this.xtreamApi});
+
+  @override
+  State<MoviesScreen> createState() => _MoviesScreenState();
+}
+
+class _MoviesScreenState extends State<MoviesScreen> {
+  late Future<List<MovieCategory>> _futureCategories;
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
+
+  static const List<MovieCategory> _fixedCategories = <MovieCategory>[
+    MovieCategory(id: -1, name: 'All'),
+    MovieCategory(id: -2, name: 'Continue Watching'),
+    MovieCategory(id: -3, name: 'My Favorites'),
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _futureCategories = _fetchCategories();
+  }
+
+  Future<List<MovieCategory>> _fetchCategories() async {
+    final raw = await widget.xtreamApi.getVodCategories();
+    return raw.map((json) => MovieCategory.fromJson(json)).toList();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  List<MovieCategory> _visibleCategories(List<MovieCategory> apiCategories) {
+    if (_searchQuery.isEmpty) {
+      return <MovieCategory>[..._fixedCategories, ...apiCategories];
+    }
+
+    final lowerQuery = _searchQuery.toLowerCase();
+    final filteredApiCategories = apiCategories
+        .where((category) => category.name.toLowerCase().contains(lowerQuery))
+        .toList();
+
+    return <MovieCategory>[
+      ..._fixedCategories,
+      ...filteredApiCategories,
+    ];
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFF1E1E1E),
+      appBar: AppBar(
+        title: const Text('Movies'),
+        backgroundColor: const Color(0xFF0F0F1A),
+        elevation: 0,
+      ),
+      body: FutureBuilder<List<MovieCategory>>(
+        future: _futureCategories,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+
+          if (snapshot.hasError) {
+            return Center(child: Text('Error: ${snapshot.error}'));
+          }
+
+          final apiCategories = snapshot.data ?? <MovieCategory>[];
+          final visibleCategories = _visibleCategories(apiCategories);
+
+          return Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(12),
+                child: TextField(
+                  controller: _searchController,
+                  style: const TextStyle(color: Colors.white),
+                  decoration: InputDecoration(
+                    hintText: 'Search categories...',
+                    hintStyle: const TextStyle(color: Colors.white38),
+                    prefixIcon: const Icon(Icons.search, color: Colors.white38),
+                    suffixIcon: _searchQuery.isNotEmpty
+                        ? IconButton(
+                            icon: const Icon(Icons.clear, color: Colors.white38),
+                            onPressed: () {
+                              _searchController.clear();
+                              setState(() => _searchQuery = '');
+                            },
+                          )
+                        : null,
+                    filled: true,
+                    fillColor: const Color(0xFF0F0F1A),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide.none,
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(color: Colors.blue, width: 2),
+                    ),
+                  ),
+                  onChanged: (value) => setState(() => _searchQuery = value),
+                ),
+              ),
+              Expanded(
+                child: ListView.separated(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  separatorBuilder: (_, __) => const Divider(color: Colors.white12),
+                  itemCount: visibleCategories.length,
+                  itemBuilder: (context, index) {
+                    final category = visibleCategories[index];
+                    return ListTile(
+                      title: Text(
+                        category.name,
+                        style: const TextStyle(color: Colors.white),
+                      ),
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => MovieListScreen(
+                              xtreamApi: widget.xtreamApi,
+                              categoryId: category.id,
+                              categoryName: category.name,
+                            ),
+                          ),
+                        );
+                      },
+                    );
+                  },
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}

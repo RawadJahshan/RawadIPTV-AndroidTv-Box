@@ -1,0 +1,312 @@
+ (cd "$(git rev-parse --show-toplevel)" && git apply --3way <<'EOF' 
+diff --git a/lib/presentation/screens/movies/movie_detail_screen.dart b/lib/presentation/screens/movies/movie_detail_screen.dart
+index 998a483fbccece3f3625210803b0ed51fc669416..5000008530054576a6fe34026c76b3d2499903f3 100644
+--- a/lib/presentation/screens/movies/movie_detail_screen.dart
++++ b/lib/presentation/screens/movies/movie_detail_screen.dart
+@@ -9,68 +9,71 @@ import '../../../utils/favorites_manager.dart';
+ 
+ class MovieDetailScreen extends StatefulWidget {
+   final XtreamApi xtreamApi;
+   final Movie movie;
+ 
+   const MovieDetailScreen({
+     super.key,
+     required this.xtreamApi,
+     required this.movie,
+   });
+ 
+   @override
+   State<MovieDetailScreen> createState() => _MovieDetailScreenState();
+ }
+ 
+ class _MovieDetailScreenState extends State<MovieDetailScreen> {
+   late final Player _player;
+   late final VideoController _controller;
+ 
+   bool _isBuffering = false;
+   bool _hasError = false;
+   bool _isPlaying = false;
+   bool _isFavorite = false;
+   String _resolution = '';
+   String _fps = '';
++  double? _draggingProgress;
+ 
+   List<AudioTrack> _audioTracks = [];
+   List<SubtitleTrack> _subtitleTracks = [];
+   AudioTrack? _selectedAudio;
+   SubtitleTrack? _selectedSubtitle;
+ 
+   StreamSubscription? _bufferingSubscription;
+   StreamSubscription? _videoParamsSubscription;
+   StreamSubscription? _tracksSubscription;
+   StreamSubscription? _trackSubscription;
+   StreamSubscription? _errorSubscription;
+ 
+   @override
+   void initState() {
+     super.initState();
+     _player = Player(
+       configuration: const PlayerConfiguration(
+-        bufferSize: 128 * 1024 * 1024,
++        // Smaller buffer improves startup & seek responsiveness for VOD streams.
++        // Keeps quality unchanged because it does not alter codec/bitrate.
++        bufferSize: 24 * 1024 * 1024,
+         logLevel: MPVLogLevel.warn,
+         vo: 'gpu',
+       ),
+     );
+     _controller = VideoController(
+       _player,
+       configuration: const VideoControllerConfiguration(
+         enableHardwareAcceleration: true,
+       ),
+     );
+     _setupListeners();
+     _loadFavorite();
+   }
+ 
+   Future<void> _loadFavorite() async {
+     final fav = await FavoritesManager.isFavoriteMovie(
+       widget.movie.id.toString(),
+     );
+     if (mounted) setState(() => _isFavorite = fav);
+   }
+ 
+   Future<void> _toggleFavorite() async {
+     if (_isFavorite) {
+       await FavoritesManager.removeFavoriteMovie(
+         widget.movie.id.toString(),
+@@ -130,62 +133,74 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
+         });
+       }
+     });
+ 
+     _errorSubscription = _player.stream.error.listen((error) {
+       if (mounted && error.isNotEmpty) {
+         setState(() {
+           _hasError = true;
+           _isBuffering = false;
+         });
+       }
+     });
+   }
+ 
+   Future<void> _playMovie() async {
+     setState(() {
+       _isPlaying = true;
+       _isBuffering = true;
+       _hasError = false;
+       _resolution = '';
+       _fps = '';
+       _audioTracks = [];
+       _subtitleTracks = [];
+     });
+ 
+-        await _player.open(
++    await _player.open(
+       Media(
+         widget.movie.streamUrl,
+         httpHeaders: {
+           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+           'Connection': 'keep-alive',
++          'Range': 'bytes=0-',
+         },
+       ),
+       play: true,
+     );
+   }
+ 
++  Future<void> _seekToProgress(
++    double progress,
++    Duration duration,
++  ) async {
++    final target = Duration(
++      milliseconds: (progress.clamp(0.0, 1.0) * duration.inMilliseconds)
++          .toInt(),
++    );
++    await _player.seek(target);
++  }
++
+   void _showAudioDialog() {
+     showDialog(
+       context: context,
+       builder: (_) => StatefulBuilder(
+         builder: (context, setDialogState) => AlertDialog(
+           backgroundColor: const Color(0xFF1E1E2E),
+           title: const Text(
+             'Audio Track',
+             style: TextStyle(color: Colors.white),
+           ),
+           content: SizedBox(
+             width: 300,
+             child: _audioTracks.isEmpty
+                 ? const Padding(
+                     padding: EdgeInsets.all(16),
+                     child: Text(
+                       'No audio tracks available',
+                       style: TextStyle(color: Colors.white54),
+                     ),
+                   )
+                 : ListView.builder(
+                     shrinkWrap: true,
+                     itemCount: _audioTracks.length,
+                     itemBuilder: (context, index) {
+                       final track = _audioTracks[index];
+@@ -693,94 +708,116 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
+                   ),
+                 ),
+ 
+                 // Controls
+                 if (_isPlaying)
+                   Container(
+                     color: const Color(0xFF0F0F1A),
+                     padding: const EdgeInsets.symmetric(
+                       horizontal: 8,
+                       vertical: 4,
+                     ),
+                     child: Column(
+                       children: [
+                         // Progress bar
+                         StreamBuilder<Duration>(
+                           stream: _player.stream.position,
+                           builder: (context, snapshot) {
+                             final position =
+                                 snapshot.data ?? Duration.zero;
+                             return StreamBuilder<Duration>(
+                               stream: _player.stream.duration,
+                               builder: (context, durationSnapshot) {
+                                 final duration =
+                                     durationSnapshot.data ??
+                                         Duration.zero;
+-                                final progress =
++                                final liveProgress =
+                                     duration.inMilliseconds > 0
+                                         ? position.inMilliseconds /
+                                             duration.inMilliseconds
+                                         : 0.0;
++                                final sliderProgress =
++                                    _draggingProgress ?? liveProgress;
++                                final displayedPosition =
++                                    _draggingProgress != null &&
++                                            duration.inMilliseconds > 0
++                                        ? Duration(
++                                            milliseconds: (sliderProgress *
++                                                    duration
++                                                        .inMilliseconds)
++                                                .toInt(),
++                                          )
++                                        : position;
+                                 return Column(
+                                   children: [
+                                     SliderTheme(
+                                       data: SliderTheme.of(context)
+                                           .copyWith(
+                                         thumbShape:
+                                             const RoundSliderThumbShape(
+                                           enabledThumbRadius: 6,
+                                         ),
+                                         trackHeight: 3,
+                                       ),
+                                       child: Slider(
+                                         value:
+-                                            progress.clamp(0.0, 1.0),
++                                            sliderProgress.clamp(
++                                          0.0,
++                                          1.0,
++                                        ),
+                                         onChanged: (value) {
+-                                          final newPos = Duration(
+-                                            milliseconds: (value *
+-                                                    duration
+-                                                        .inMilliseconds)
+-                                                .toInt(),
++                                          setState(() {
++                                            _draggingProgress = value;
++                                          });
++                                        },
++                                        onChangeEnd: (value) async {
++                                          setState(() {
++                                            _draggingProgress = null;
++                                          });
++                                          await _seekToProgress(
++                                            value,
++                                            duration,
+                                           );
+-                                          _player.seek(newPos);
+                                         },
+                                         activeColor: Colors.blue,
+                                         inactiveColor: Colors.white24,
+                                       ),
+                                     ),
+                                     Padding(
+                                       padding:
+                                           const EdgeInsets.symmetric(
+                                         horizontal: 16,
+                                       ),
+                                       child: Row(
+                                         mainAxisAlignment:
+                                             MainAxisAlignment
+                                                 .spaceBetween,
+                                         children: [
+                                           Text(
+-                                            _formatDuration(position),
++                                            _formatDuration(
++                                              displayedPosition,
++                                            ),
+                                             style: const TextStyle(
+                                               color: Colors.white54,
+                                               fontSize: 11,
+                                             ),
+                                           ),
+                                           Text(
+                                             _formatDuration(duration),
+                                             style: const TextStyle(
+                                               color: Colors.white54,
+                                               fontSize: 11,
+                                             ),
+                                           ),
+                                         ],
+                                       ),
+                                     ),
+                                   ],
+                                 );
+                               },
+                             );
+                           },
+                         ),
+ 
+                         // Buttons row
+                         Row(
+                           children: [
+@@ -919,26 +956,26 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
+                                         min: 0,
+                                         max: 100,
+                                         onChanged: (value) {
+                                           _player.setVolume(value);
+                                         },
+                                         activeColor: Colors.blue,
+                                         inactiveColor: Colors.white24,
+                                       ),
+                                     ),
+                                   ],
+                                 );
+                               },
+                             ),
+                           ],
+                         ),
+                       ],
+                     ),
+                   ),
+               ],
+             ),
+           ),
+         ],
+       ),
+     );
+   }
+-}
+\ No newline at end of file
++}
+ 
+EOF
+)
