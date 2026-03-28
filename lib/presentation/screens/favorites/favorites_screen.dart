@@ -77,6 +77,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
       return _buildEmpty('No favorite channels yet', Icons.live_tv);
     }
     return ListView.separated(
+      physics: const BouncingScrollPhysics(),
       padding: const EdgeInsets.all(12),
       separatorBuilder: (_, index) => const Divider(color: Colors.white12),
       itemCount: _favoriteChannels.length,
@@ -95,8 +96,9 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
                     borderRadius: BorderRadius.circular(8),
                     child: Image.network(
                       channel.logoUrl,
-                      cacheWidth: 300,
+                      cacheWidth: 400,
                       cacheHeight: 450,
+                      filterQuality: FilterQuality.low,
                       fit: BoxFit.contain,
                       errorBuilder: (_, error, stackTrace) => const Icon(Icons.tv, color: Colors.white54),
                     ),

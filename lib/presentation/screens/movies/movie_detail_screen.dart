@@ -229,24 +229,55 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
         ),
         body: _loading
             ? const Center(child: CircularProgressIndicator())
-            : SingleChildScrollView(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _buildHeroHeader(),
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 18, 16, 24),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          _buildInfoSection(),
-                          const SizedBox(height: 18),
-                          _buildActionButtons(),
-                        ],
-                      ),
+            : OrientationBuilder(
+                builder: (context, orientation) {
+                  if (orientation == Orientation.landscape) {
+                    return Row(
+                      children: [
+                        SizedBox(
+                          width: MediaQuery.of(context).size.width * 0.4,
+                          child: _buildHeroHeader(),
+                        ),
+                        Expanded(
+                          child: SingleChildScrollView(
+                            physics: const BouncingScrollPhysics(),
+                            child: Padding(
+                              padding: const EdgeInsets.fromLTRB(16, 18, 16, 24),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  _buildInfoSection(),
+                                  const SizedBox(height: 18),
+                                  _buildActionButtons(),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    );
+                  }
+                  return SingleChildScrollView(
+                    physics: const BouncingScrollPhysics(),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _buildHeroHeader(),
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 18, 16, 24),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              _buildInfoSection(),
+                              const SizedBox(height: 18),
+                              _buildActionButtons(),
+                            ],
+                          ),
+                        ),
+                      ],
                     ),
-                  ],
-                ),
+                  );
+                },
               ),
       ),
     );
@@ -254,15 +285,18 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
 
   Widget _buildHeroHeader() {
     return SizedBox(
-      height: MediaQuery.of(context).size.height * 0.35,
+      height: MediaQuery.of(context).orientation == Orientation.landscape
+          ? double.infinity
+          : MediaQuery.of(context).size.height * 0.35,
       width: double.infinity,
       child: Stack(
         fit: StackFit.expand,
         children: [
           Image.network(
             _posterUrl,
-            cacheWidth: 300,
+            cacheWidth: 400,
             cacheHeight: 450,
+            filterQuality: FilterQuality.low,
             fit: BoxFit.cover,
             errorBuilder: (_, __, ___) => Container(
               color: const Color(0xFF171717),
@@ -350,6 +384,7 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
                   child: Text('N/A', style: TextStyle(color: Colors.white54)),
                 )
               : ListView.separated(
+                  physics: const BouncingScrollPhysics(),
                   scrollDirection: Axis.horizontal,
                   itemBuilder: (context, index) => Chip(
                     backgroundColor: const Color(0xFF1F2430),

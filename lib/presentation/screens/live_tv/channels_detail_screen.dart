@@ -366,6 +366,7 @@ class _ChannelsDetailScreenState extends State<ChannelsDetailScreen> {
                     ),
                     Expanded(
                       child: ListView.builder(
+                        physics: const BouncingScrollPhysics(),
                         itemCount: channels.length,
                         itemBuilder: (context, index) {
                           final channel = channels[index];
@@ -402,8 +403,9 @@ class _ChannelsDetailScreenState extends State<ChannelsDetailScreen> {
                                                       6),
                                               child: Image.network(
                                                 channel.logoUrl,
-                                                cacheWidth: 300,
+                                                cacheWidth: 400,
                                                 cacheHeight: 450,
+                                                filterQuality: FilterQuality.low,
                                                 fit: BoxFit.contain,
                                                 errorBuilder:
                                                     (_, __, ___) =>
@@ -468,9 +470,11 @@ class _ChannelsDetailScreenState extends State<ChannelsDetailScreen> {
                       child: Stack(
                         children: [
                           SizedBox.expand(
-                            child: Video(
-                              controller: _controller,
-                              fit: BoxFit.contain,
+                            child: RepaintBoundary(
+                              child: Video(
+                                controller: _controller,
+                                fit: BoxFit.contain,
+                              ),
                             ),
                           ),
 
@@ -626,8 +630,9 @@ class _ChannelsDetailScreenState extends State<ChannelsDetailScreen> {
                                           BorderRadius.circular(8),
                                       child: Image.network(
                                         selectedChannel.logoUrl,
-                                        cacheWidth: 300,
+                                        cacheWidth: 400,
                                         cacheHeight: 450,
+                                        filterQuality: FilterQuality.low,
                                         fit: BoxFit.contain,
                                         errorBuilder: (_, __, ___) =>
                                             const Icon(
