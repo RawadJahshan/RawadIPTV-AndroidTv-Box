@@ -174,12 +174,53 @@ class _MovieListScreenState extends State<MovieListScreen> {
     return _movies.where((movie) => movie.title.toLowerCase().contains(lowerQuery)).toList();
   }
 
-  int _getCrossAxisCount(BuildContext context) {
-    final width = MediaQuery.of(context).size.width;
-    if (width >= 1200) return 6;
-    if (width >= 900) return 5;
-    if (width >= 700) return 4;
-    return 3;
+  _GridConfig _getGridConfig(BuildContext context) {
+    final media = MediaQuery.of(context);
+    final width = media.size.width;
+    final isPortrait = media.orientation == Orientation.portrait;
+
+    if (width < 420) {
+      return _GridConfig(
+        crossAxisCount: isPortrait ? 4 : 5,
+        crossAxisSpacing: 6,
+        mainAxisSpacing: 8,
+        childAspectRatio: isPortrait ? 0.53 : 0.7,
+      );
+    }
+
+    if (width < 700) {
+      return _GridConfig(
+        crossAxisCount: isPortrait ? 5 : 6,
+        crossAxisSpacing: 8,
+        mainAxisSpacing: 10,
+        childAspectRatio: isPortrait ? 0.56 : 0.74,
+      );
+    }
+
+    if (width < 1000) {
+      return const _GridConfig(
+        crossAxisCount: 6,
+        crossAxisSpacing: 10,
+        mainAxisSpacing: 10,
+        childAspectRatio: 0.74,
+      );
+    }
+
+    if (width < 1400) {
+      return const _GridConfig(
+        crossAxisCount: 7,
+        crossAxisSpacing: 10,
+        mainAxisSpacing: 12,
+        childAspectRatio: 0.76,
+      );
+    }
+
+    return const _GridConfig(
+      crossAxisCount: 8,
+      crossAxisSpacing: 12,
+      mainAxisSpacing: 12,
+      childAspectRatio: 0.78,
+    );
   }
 
   double _getFontSize(BuildContext context, double base) {
@@ -193,15 +234,24 @@ class _MovieListScreenState extends State<MovieListScreen> {
     return PopScope(
       canPop: true,
       child: Scaffold(
-        backgroundColor: const Color(0xFF1E1E1E),
+        backgroundColor: const Color(0xFF05070D),
         appBar: AppBar(
           toolbarHeight: 46,
           title: Text(
             widget.categoryName,
             style: const TextStyle(fontSize: 15),
           ),
-          backgroundColor: const Color(0xFF0F0F1A),
+          backgroundColor: Colors.transparent,
           elevation: 0,
+          flexibleSpace: Container(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                colors: [Color(0xFF121A2B), Color(0xFF080B14)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+            ),
+          ),
         ),
         body: Column(
           children: [
@@ -245,7 +295,7 @@ class _MovieListScreenState extends State<MovieListScreen> {
                         )
                       : null,
                   filled: true,
-                  fillColor: const Color(0xFF0F0F1A),
+                  fillColor: const Color(0xFF0F1422),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(10),
                     borderSide: BorderSide.none,
@@ -326,17 +376,19 @@ class _MovieListScreenState extends State<MovieListScreen> {
     final paginatedMovies = filteredMovies.take(end).toList();
     _hasMore = end < filteredMovies.length;
 
+    final grid = _getGridConfig(context);
+
     return CustomScrollView(
       physics: const BouncingScrollPhysics(),
       slivers: [
         SliverPadding(
-          padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+          padding: const EdgeInsets.fromLTRB(8, 0, 8, 12),
           sliver: SliverGrid(
             gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: _getCrossAxisCount(context),
-              crossAxisSpacing: 10,
-              mainAxisSpacing: 10,
-              childAspectRatio: 0.72,
+              crossAxisCount: grid.crossAxisCount,
+              crossAxisSpacing: grid.crossAxisSpacing,
+              mainAxisSpacing: grid.mainAxisSpacing,
+              childAspectRatio: grid.childAspectRatio,
             ),
             delegate: SliverChildBuilderDelegate(
               (context, index) => _MovieCard(
@@ -374,6 +426,21 @@ class _MovieListScreenState extends State<MovieListScreen> {
       ],
     );
   }
+}
+
+
+class _GridConfig {
+  final int crossAxisCount;
+  final double crossAxisSpacing;
+  final double mainAxisSpacing;
+  final double childAspectRatio;
+
+  const _GridConfig({
+    required this.crossAxisCount,
+    required this.crossAxisSpacing,
+    required this.mainAxisSpacing,
+    required this.childAspectRatio,
+  });
 }
 
 class _MovieCard extends StatefulWidget {
@@ -419,7 +486,12 @@ class _MovieCardState extends State<_MovieCard> {
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 180),
               decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(12),
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF111B2E), Color(0xFF0A101D)],
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                ),
+                borderRadius: BorderRadius.circular(10),
                 border: Border.all(
                   color: _isHovering ? const Color(0xFF00C6FF).withValues(alpha: 0.6) : Colors.transparent,
                   width: 1.2,
@@ -434,7 +506,7 @@ class _MovieCardState extends State<_MovieCard> {
                 ],
               ),
               child: ClipRRect(
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(10),
                 child: Material(
                   color: Colors.transparent,
                   child: InkWell(
@@ -521,7 +593,7 @@ class _MovieCardState extends State<_MovieCard> {
                         ),
                         Container(
                           color: const Color(0xFF101420),
-                          padding: const EdgeInsets.fromLTRB(7, 6, 7, 7),
+                          padding: const EdgeInsets.fromLTRB(6, 5, 6, 6),
                           child: Text(
                             widget.movie.title,
                             maxLines: 2,
@@ -529,7 +601,7 @@ class _MovieCardState extends State<_MovieCard> {
                             style: const TextStyle(
                               color: Colors.white,
                               fontWeight: FontWeight.w600,
-                              fontSize: 11,
+                              fontSize: 10,
                               height: 1.2,
                             ),
                           ),
