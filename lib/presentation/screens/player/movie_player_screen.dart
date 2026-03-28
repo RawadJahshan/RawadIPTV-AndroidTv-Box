@@ -40,6 +40,12 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
   Duration _duration = Duration.zero;
   DateTime? _lastProgressSaveAt;
 
+  void _syncPlaybackState() {
+    final state = _ctrl.playbackState.value;
+    _position = state.position;
+    _duration = state.duration;
+  }
+
   void _initPlayer() {
     _ctrl = ThaNativePlayerController.single(
       ThaMediaSource(
@@ -51,6 +57,7 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
       ),
       autoPlay: true,
     );
+    _ctrl.playbackState.addListener(_syncPlaybackState);
 
     if (widget.startAt != null && widget.startAt! > Duration.zero) {
       Future.delayed(const Duration(seconds: 2), () {
@@ -126,6 +133,7 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
     _restoreLandscapeAndSystemUi();
     _progressTimer?.cancel();
     unawaited(_saveProgress(force: true));
+    _ctrl.playbackState.removeListener(_syncPlaybackState);
     _ctrl.dispose();
     super.dispose();
   }
@@ -134,7 +142,7 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
   Widget build(BuildContext context) {
     return PopScope(
       canPop: true,
-      onPopInvokedWithResult: (didPop, result) {
+      onPopInvoked: (didPop) {
         _restoreLandscapeAndSystemUi();
         if (didPop) {
           unawaited(_saveProgress(force: true));
@@ -142,79 +150,28 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
       },
       child: Scaffold(
         backgroundColor: Colors.black,
-        body: Stack(
-          children: [
-            ThaModernPlayer(
-              controller: _ctrl,
-              doubleTapSeek: const Duration(seconds: 10),
-              autoHideAfter: const Duration(seconds: 3),
-              initialBoxFit: BoxFit.contain,
-              overlay: Stack(
-                children: [
-                  Positioned(
-                    top: 0,
-                    left: 0,
-                    right: 60,
-                    child: SafeArea(
-                      child: Padding(
-                        padding: const EdgeInsets.all(12),
-                        child: Text(
-                          widget.title,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 15,
-                            fontWeight: FontWeight.w600,
-                            shadows: [
-                              Shadow(
-                                color: Colors.black54,
-                                blurRadius: 4,
-                              ),
-                            ],
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    ),
-                  ),
-                  Positioned(
-                    top: 0,
-                    right: 0,
-                    child: SafeArea(
-                      child: IconButton(
-                        icon: const Icon(
-                          Icons.close,
-                          color: Colors.white,
-                          size: 28,
-                        ),
-                        onPressed: () => Navigator.of(context).pop(),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Positioned(
-              bottom: 0,
-              right: 0,
-              child: SizedBox(
-                width: 56,
-                height: 56,
-                child: GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTap: () {},
+        body: ThaModernPlayer(
+          controller: _ctrl,
+          doubleTapSeek: const Duration(seconds: 10),
+          autoHideAfter: const Duration(seconds: 3),
+          initialBoxFit: BoxFit.contain,
+          autoFullscreen: true,
+          overlay: SafeArea(
+            child: Align(
+              alignment: Alignment.topRight,
+              child: IconButton(
+                icon: const Icon(
+                  Icons.close,
+                  color: Colors.white,
+                  size: 28,
                 ),
+                onPressed: () {
+                  Navigator.of(context).pop();
+                  Navigator.of(context).pop();
+                },
               ),
             ),
-            ValueListenableBuilder<ThaPlaybackState>(
-              valueListenable: _ctrl.playbackState,
-              builder: (_, state, __) {
-                _position = state.position;
-                _duration = state.duration;
-                return const SizedBox.shrink();
-              },
-            ),
-          ],
+          ),
         ),
       ),
     );
