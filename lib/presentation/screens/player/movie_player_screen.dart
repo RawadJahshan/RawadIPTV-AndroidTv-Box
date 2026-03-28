@@ -35,6 +35,9 @@ class MoviePlayerScreen extends StatefulWidget {
 class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
   late ThaNativePlayerController _ctrl;
   Timer? _progressTimer;
+  bool _triedFallback = false;
+  bool _isFallbackDialogOpen = false;
+  String? _errorMessage;
 
   Duration _position = Duration.zero;
   Duration _duration = Duration.zero;
@@ -58,6 +61,7 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
       autoPlay: true,
     );
     _ctrl.playbackState.addListener(_syncPlaybackState);
+    _attachErrorListener();
 
     if (widget.startAt != null && widget.startAt! > Duration.zero) {
       Future.delayed(const Duration(seconds: 2), () {
@@ -67,6 +71,111 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
 
     _progressTimer =
         Timer.periodic(const Duration(seconds: 5), (_) => _saveProgress());
+  }
+
+  void _attachErrorListener() {
+    _ctrl.onErrorDetails = (error) {
+      if (!mounted) return;
+      final errorStr = error?.toString() ?? '';
+      final is4KError = errorStr.contains('EXCEEDS_CAPABILITIES') ||
+          errorStr.contains('NO_EXCEEDS_CAPABILITIES') ||
+          errorStr.contains('format_supported=NO_EXCEEDS_CAPABILITIES') ||
+          errorStr.contains('3840') ||
+          errorStr.contains('hevc');
+
+      if (is4KError && !_triedFallback && !_isFallbackDialogOpen) {
+        _show4KFallbackDialog();
+      } else {
+        setState(() {
+          _errorMessage = 'Playback error. Please try another stream.';
+        });
+      }
+    };
+  }
+
+  void _show4KFallbackDialog() {
+    if (!mounted) return;
+    _isFallbackDialogOpen = true;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => AlertDialog(
+        backgroundColor: const Color(0xFF1E1E2E),
+        title: const Text(
+          '4K Not Supported',
+          style: TextStyle(color: Colors.white),
+        ),
+        content: const Text(
+          'Your device does not support 4K playback.\n\n'
+          'Would you like to try playing at 1080p instead?',
+          style: TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              _isFallbackDialogOpen = false;
+              Navigator.of(context).pop();
+              Navigator.of(context).pop();
+            },
+            child: const Text(
+              'Go Back',
+              style: TextStyle(color: Colors.white54),
+            ),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              _isFallbackDialogOpen = false;
+              Navigator.of(context).pop();
+              unawaited(_retryAt1080p());
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.blue,
+            ),
+            child: const Text('Play 1080p'),
+          ),
+        ],
+      ),
+    ).whenComplete(() {
+      _isFallbackDialogOpen = false;
+    });
+  }
+
+  Future<void> _retryAt1080p() async {
+    if (!mounted) return;
+    _triedFallback = true;
+
+    try {
+      _ctrl.playbackState.removeListener(_syncPlaybackState);
+    } catch (_) {}
+
+    try {
+      _ctrl.dispose();
+    } catch (_) {}
+
+    final fallbackUrl = widget.streamUrl
+        .replaceAll('.mkv', '.m3u8')
+        .replaceAll('.mp4', '.m3u8');
+
+    setState(() {
+      _errorMessage = null;
+    });
+
+    _ctrl = ThaNativePlayerController.single(
+      ThaMediaSource(
+        fallbackUrl,
+        headers: const {
+          'User-Agent': 'Mozilla/5.0 (Linux; Android 10)',
+          'Connection': 'keep-alive',
+        },
+      ),
+      autoPlay: true,
+    );
+    _ctrl.playbackState.addListener(_syncPlaybackState);
+    _attachErrorListener();
+
+    if (mounted) {
+      setState(() {});
+    }
   }
 
   void _restoreLandscapeAndSystemUi() {
@@ -157,19 +266,42 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
           initialBoxFit: BoxFit.contain,
           autoFullscreen: true,
           overlay: SafeArea(
-            child: Align(
-              alignment: Alignment.topRight,
-              child: IconButton(
-                icon: const Icon(
-                  Icons.close,
-                  color: Colors.white,
-                  size: 28,
+            child: Stack(
+              children: [
+                if (_errorMessage != null)
+                  Center(
+                    child: Container(
+                      margin: const EdgeInsets.symmetric(horizontal: 24),
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.75),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Text(
+                        _errorMessage!,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ),
+                  ),
+                Align(
+                  alignment: Alignment.topRight,
+                  child: IconButton(
+                    icon: const Icon(
+                      Icons.close,
+                      color: Colors.white,
+                      size: 28,
+                    ),
+                    onPressed: () {
+                      Navigator.of(context).pop();
+                      Navigator.of(context).pop();
+                    },
+                  ),
                 ),
-                onPressed: () {
-                  Navigator.of(context).pop();
-                  Navigator.of(context).pop();
-                },
-              ),
+              ],
             ),
           ),
         ),
