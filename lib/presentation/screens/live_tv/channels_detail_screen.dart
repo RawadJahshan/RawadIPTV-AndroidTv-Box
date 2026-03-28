@@ -37,6 +37,10 @@ class _ChannelsDetailScreenState extends State<ChannelsDetailScreen> {
   bool _usingM3u8 = false;
   int _retryCount = 0;
   static const int _maxRetries = 3;
+  static const Map<String, String> _streamHttpHeaders = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+    'Connection': 'keep-alive',
+  };
 
   StreamSubscription? _bufferingSubscription;
   StreamSubscription? _videoParamsSubscription;
@@ -193,11 +197,7 @@ class _ChannelsDetailScreenState extends State<ChannelsDetailScreen> {
       await _player.open(
         Media(
           channel.streamUrl,
-          httpHeaders: {
-            'User-Agent':
-                'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
-            'Connection': 'keep-alive',
-          },
+          httpHeaders: _streamHttpHeaders,
         ),
         play: true,
       );
@@ -234,11 +234,7 @@ class _ChannelsDetailScreenState extends State<ChannelsDetailScreen> {
       await _player.open(
         Media(
           channel.streamUrlM3u8,
-          httpHeaders: {
-            'User-Agent':
-                'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
-            'Connection': 'keep-alive',
-          },
+          httpHeaders: _streamHttpHeaders,
         ),
         play: true,
       );
