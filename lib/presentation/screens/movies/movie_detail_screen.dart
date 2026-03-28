@@ -210,48 +210,59 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
     return h > 0 ? '$h:$m:$s' : '${d.inMinutes}:$s';
   }
 
+  double _getFontSize(BuildContext context, double base) {
+    final width = MediaQuery.of(context).size.width;
+    if (width >= 900) return base;
+    return base * 0.85;
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFF121212),
-      appBar: AppBar(
-        backgroundColor: const Color(0xFF0F0F1A),
-        elevation: 0,
-        leading: BackButton(color: Colors.white.withValues(alpha: 0.9)),
-      ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : SingleChildScrollView(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildHeroHeader(),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 18, 16, 24),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _buildInfoSection(),
-                        const SizedBox(height: 18),
-                        _buildActionButtons(),
-                      ],
+    return PopScope(
+      canPop: true,
+      child: Scaffold(
+        backgroundColor: const Color(0xFF121212),
+        appBar: AppBar(
+          backgroundColor: const Color(0xFF0F0F1A),
+          elevation: 0,
+          leading: BackButton(color: Colors.white.withValues(alpha: 0.9)),
+        ),
+        body: _loading
+            ? const Center(child: CircularProgressIndicator())
+            : SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildHeroHeader(),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 18, 16, 24),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _buildInfoSection(),
+                          const SizedBox(height: 18),
+                          _buildActionButtons(),
+                        ],
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
+      ),
     );
   }
 
   Widget _buildHeroHeader() {
     return SizedBox(
-      height: 320,
+      height: MediaQuery.of(context).size.height * 0.35,
       width: double.infinity,
       child: Stack(
         fit: StackFit.expand,
         children: [
           Image.network(
             _posterUrl,
+            cacheWidth: 300,
+            cacheHeight: 450,
             fit: BoxFit.cover,
             errorBuilder: (_, __, ___) => Container(
               color: const Color(0xFF171717),
@@ -280,9 +291,9 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
               _title,
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
+              style: TextStyle(
                 color: Colors.white,
-                fontSize: 30,
+                fontSize: _getFontSize(context, 30),
                 fontWeight: FontWeight.w800,
                 letterSpacing: 0.2,
               ),
@@ -308,16 +319,16 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
           ],
         ),
         const SizedBox(height: 16),
-        const Text(
+        Text(
           'Plot',
-          style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700),
+          style: TextStyle(color: Colors.white, fontSize: _getFontSize(context, 16), fontWeight: FontWeight.w700),
         ),
         const SizedBox(height: 6),
         Text(
           _plot.isEmpty ? 'No description available.' : _plot,
           maxLines: _isPlotExpanded ? null : 4,
           overflow: _isPlotExpanded ? TextOverflow.visible : TextOverflow.ellipsis,
-          style: const TextStyle(color: Colors.white70, fontSize: 14, height: 1.45),
+          style: TextStyle(color: Colors.white70, fontSize: _getFontSize(context, 14), height: 1.45),
         ),
         if (_plot.length > 210)
           TextButton(
@@ -326,9 +337,9 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
             child: Text(_isPlotExpanded ? 'Read less' : 'Read more'),
           ),
         const SizedBox(height: 12),
-        const Text(
+        Text(
           'Cast',
-          style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700),
+          style: TextStyle(color: Colors.white, fontSize: _getFontSize(context, 16), fontWeight: FontWeight.w700),
         ),
         const SizedBox(height: 8),
         SizedBox(
@@ -345,7 +356,7 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
                     side: BorderSide.none,
                     label: Text(
                       _castMembers[index],
-                      style: const TextStyle(color: Colors.white70, fontSize: 12),
+                      style: TextStyle(color: Colors.white70, fontSize: _getFontSize(context, 12)),
                     ),
                   ),
                   separatorBuilder: (_, __) => const SizedBox(width: 8),
@@ -387,70 +398,64 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
   Widget _buildActionButtons() {
     final hasTrailer = _trailerUrl.trim().isNotEmpty;
 
-    return Row(
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
       children: [
-        Expanded(
-          child: ElevatedButton.icon(
-            onPressed: _onPlayNow,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF0077B6),
-              disabledBackgroundColor: const Color(0xFF0077B6),
-              foregroundColor: Colors.white,
-              disabledForegroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(vertical: 12),
-            ),
-            icon: const Icon(Icons.play_circle_fill, size: 18),
-            label: const Text('Play Now'),
+        ElevatedButton.icon(
+          onPressed: _onPlayNow,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: const Color(0xFF0077B6),
+            disabledBackgroundColor: const Color(0xFF0077B6),
+            foregroundColor: Colors.white,
+            disabledForegroundColor: Colors.white,
+            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
           ),
+          icon: const Icon(Icons.play_circle_fill, size: 18),
+          label: const Text('Play Now'),
         ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: FilledButton.icon(
-            icon: Icon(_isFavorite ? Icons.favorite : Icons.favorite_border),
-            label: Text(_isFavorite ? 'Remove from Favorites' : 'Add to Favorites'),
-            style: FilledButton.styleFrom(
-              backgroundColor: _isFavorite ? Colors.red : null,
-              padding: const EdgeInsets.symmetric(vertical: 12),
-            ),
-            onPressed: () async {
-              final movie = widget.movie;
-              if (_isFavorite) {
-                await FavoritesService.remove(movie.streamId, FavoriteType.movie);
-                if (mounted) {
-                  setState(() => _isFavorite = false);
-                }
-              } else {
-                await FavoritesService.add(
-                  FavoriteEntry(
-                    id: movie.streamId,
-                    name: movie.title,
-                    poster: movie.posterUrl,
-                    type: FavoriteType.movie,
-                    addedAt: DateTime.now(),
-                  ),
-                );
-                if (mounted) {
-                  setState(() => _isFavorite = true);
-                }
-              }
-            },
+        FilledButton.icon(
+          icon: Icon(_isFavorite ? Icons.favorite : Icons.favorite_border),
+          label: Text(_isFavorite ? 'Remove from Favorites' : 'Add to Favorites'),
+          style: FilledButton.styleFrom(
+            backgroundColor: _isFavorite ? Colors.red : null,
+            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
           ),
+          onPressed: () async {
+            final movie = widget.movie;
+            if (_isFavorite) {
+              await FavoritesService.remove(movie.streamId, FavoriteType.movie);
+              if (mounted) {
+                setState(() => _isFavorite = false);
+              }
+            } else {
+              await FavoritesService.add(
+                FavoriteEntry(
+                  id: movie.streamId,
+                  name: movie.title,
+                  poster: movie.posterUrl,
+                  type: FavoriteType.movie,
+                  addedAt: DateTime.now(),
+                ),
+              );
+              if (mounted) {
+                setState(() => _isFavorite = true);
+              }
+            }
+          },
         ),
         if (hasTrailer) ...[
-          const SizedBox(width: 8),
-          Expanded(
-            child: ElevatedButton.icon(
-              onPressed: _openTrailer,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF00A86B),
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 12),
-              ),
-              icon: const Icon(Icons.ondemand_video, size: 18),
-              label: const Text('Play Trailer'),
+          ElevatedButton.icon(
+            onPressed: _openTrailer,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF00A86B),
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
             ),
+            icon: const Icon(Icons.ondemand_video, size: 18),
+            label: const Text('Play Trailer'),
           ),
-        ],
+        ]
       ],
     );
   }

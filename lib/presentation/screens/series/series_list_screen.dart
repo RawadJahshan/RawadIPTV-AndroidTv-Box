@@ -27,12 +27,15 @@ class SeriesListScreen extends StatefulWidget {
 }
 
 class _SeriesListScreenState extends State<SeriesListScreen> {
+  static const int _pageSize = 50;
   final TextEditingController _searchController = TextEditingController();
 
   bool _isLoading = true;
   String? _errorMessage;
   String _searchQuery = '';
   List<_SeriesCardItem> _series = <_SeriesCardItem>[];
+  int _currentPage = 0;
+  bool _hasMore = true;
 
   bool get _isContinueWatching => widget.categoryId == -2;
   bool get _isFavorites => widget.categoryId == -3;
@@ -76,6 +79,8 @@ class _SeriesListScreenState extends State<SeriesListScreen> {
 
       setState(() {
         _series = rawSeries.map(_SeriesCardItem.fromApiJson).toList();
+        _currentPage = 0;
+        _hasMore = _series.length > _pageSize;
         _isLoading = false;
       });
     } catch (_) {
@@ -103,6 +108,8 @@ class _SeriesListScreenState extends State<SeriesListScreen> {
               ),
             )
             .toList();
+        _currentPage = 0;
+        _hasMore = _series.length > _pageSize;
         _isLoading = false;
       });
     } catch (_) {
@@ -159,6 +166,8 @@ class _SeriesListScreenState extends State<SeriesListScreen> {
         _series = latestBySeries.values.toList()
           ..sort((a, b) => (b.lastWatched ?? DateTime.fromMillisecondsSinceEpoch(0))
               .compareTo(a.lastWatched ?? DateTime.fromMillisecondsSinceEpoch(0)));
+        _currentPage = 0;
+        _hasMore = _series.length > _pageSize;
         _isLoading = false;
       });
     } catch (_) {
@@ -274,56 +283,81 @@ class _SeriesListScreenState extends State<SeriesListScreen> {
     return _series.where((series) => series.title.toLowerCase().contains(lowerQuery)).toList();
   }
 
+  int _getCrossAxisCount(BuildContext context) {
+    final width = MediaQuery.of(context).size.width;
+    if (width >= 1200) return 5;
+    if (width >= 900) return 4;
+    if (width >= 600) return 3;
+    return 2;
+  }
+
+  double _getFontSize(BuildContext context, double base) {
+    final width = MediaQuery.of(context).size.width;
+    if (width >= 900) return base;
+    return base * 0.85;
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFF1E1E1E),
-      appBar: AppBar(
-        title: Text(widget.categoryName),
-        backgroundColor: const Color(0xFF0F0F1A),
-        elevation: 0,
-      ),
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child: TextField(
-              controller: _searchController,
-              style: const TextStyle(color: Colors.white),
-              decoration: InputDecoration(
-                hintText: 'Search series...',
-                hintStyle: const TextStyle(color: Colors.white38),
-                prefixIcon: const Icon(Icons.search, color: Colors.white38),
-                suffixIcon: _searchQuery.isNotEmpty
-                    ? IconButton(
-                        icon: const Icon(Icons.clear, color: Colors.white38),
-                        onPressed: () {
-                          _searchController.clear();
-                          setState(() => _searchQuery = '');
-                        },
-                      )
-                    : null,
-                filled: true,
-                fillColor: const Color(0xFF0F0F1A),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide.none,
+    return PopScope(
+      canPop: true,
+      child: Scaffold(
+        backgroundColor: const Color(0xFF1E1E1E),
+        appBar: AppBar(
+          title: Text(widget.categoryName),
+          backgroundColor: const Color(0xFF0F0F1A),
+          elevation: 0,
+        ),
+        body: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: TextField(
+                controller: _searchController,
+                style: const TextStyle(color: Colors.white),
+                decoration: InputDecoration(
+                  hintText: 'Search series...',
+                  hintStyle: const TextStyle(color: Colors.white38),
+                  prefixIcon: const Icon(Icons.search, color: Colors.white38),
+                  suffixIcon: _searchQuery.isNotEmpty
+                      ? IconButton(
+                          icon: const Icon(Icons.clear, color: Colors.white38),
+                          onPressed: () {
+                            _searchController.clear();
+                            setState(() {
+                              _searchQuery = '';
+                              _currentPage = 0;
+                              _hasMore = _series.length > _pageSize;
+                            });
+                          },
+                        )
+                      : null,
+                  filled: true,
+                  fillColor: const Color(0xFF0F0F1A),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide.none,
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: const BorderSide(color: Colors.blue, width: 2),
+                  ),
                 ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: Colors.blue, width: 2),
-                ),
+                onChanged: (value) => setState(() {
+                  _searchQuery = value;
+                  _currentPage = 0;
+                  _hasMore = _filteredSeries.length > _pageSize;
+                }),
               ),
-              onChanged: (value) => setState(() => _searchQuery = value),
             ),
-          ),
-          Expanded(child: _buildBody()),
-        ],
+            Expanded(child: _buildBody(context)),
+          ],
+        ),
       ),
     );
   }
 
-  Widget _buildBody() {
+  Widget _buildBody(BuildContext context) {
     if (_isLoading) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -335,7 +369,7 @@ class _SeriesListScreenState extends State<SeriesListScreen> {
           children: [
             Text(
               _errorMessage!,
-              style: const TextStyle(color: Colors.white70),
+              style: TextStyle(color: Colors.white70, fontSize: _getFontSize(context, 14)),
             ),
             const SizedBox(height: 12),
             ElevatedButton(
@@ -351,62 +385,88 @@ class _SeriesListScreenState extends State<SeriesListScreen> {
 
     if (filteredSeries.isEmpty) {
       if (_isFavorites) {
-        return const Center(
+        return Center(
           child: Text(
             'No favorite series yet',
-            style: TextStyle(color: Colors.white54, fontSize: 16),
+            style: TextStyle(color: Colors.white54, fontSize: _getFontSize(context, 16)),
           ),
         );
       }
       if (_isContinueWatching) {
-        return const Center(
+        return Center(
           child: Text(
             'No series in Continue Watching yet',
-            style: TextStyle(color: Colors.white54, fontSize: 16),
+            style: TextStyle(color: Colors.white54, fontSize: _getFontSize(context, 16)),
           ),
         );
       }
 
-      return const Center(
+      return Center(
         child: Text(
           'No series found',
-          style: TextStyle(color: Colors.white54, fontSize: 16),
+          style: TextStyle(color: Colors.white54, fontSize: _getFontSize(context, 16)),
         ),
       );
     }
 
-    return GridView.builder(
-      padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 4,
-        crossAxisSpacing: 10,
-        mainAxisSpacing: 10,
-        childAspectRatio: 0.72,
-      ),
-      itemCount: filteredSeries.length,
-      itemBuilder: (context, index) {
-        final item = filteredSeries[index];
-        return _SeriesCard(
-          series: item,
-          onTap: () {
-            if (_isContinueWatching) {
-              _openContinueWatchingEpisode(item);
-              return;
-            }
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => SeriesDetailScreen(
-                  xtreamApi: widget.xtreamApi,
-                  seriesId: item.seriesId,
-                  seriesName: item.title,
-                  posterUrl: item.posterUrl,
+    final end = ((_currentPage + 1) * _pageSize).clamp(0, filteredSeries.length);
+    final paginatedSeries = filteredSeries.take(end).toList();
+    _hasMore = end < filteredSeries.length;
+
+    return CustomScrollView(
+      slivers: [
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+          sliver: SliverGrid(
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: _getCrossAxisCount(context),
+              crossAxisSpacing: 10,
+              mainAxisSpacing: 10,
+              childAspectRatio: 0.72,
+            ),
+            delegate: SliverChildBuilderDelegate(
+              (context, index) {
+                final item = paginatedSeries[index];
+                return _SeriesCard(
+                  series: item,
+                  onTap: () {
+                    if (_isContinueWatching) {
+                      _openContinueWatchingEpisode(item);
+                      return;
+                    }
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => SeriesDetailScreen(
+                          xtreamApi: widget.xtreamApi,
+                          seriesId: item.seriesId,
+                          seriesName: item.title,
+                          posterUrl: item.posterUrl,
+                        ),
+                      ),
+                    );
+                  },
+                );
+              },
+              childCount: paginatedSeries.length,
+            ),
+          ),
+        ),
+        if (_hasMore && filteredSeries.length > _pageSize)
+          SliverToBoxAdapter(
+            child: Center(
+              child: Padding(
+                padding: const EdgeInsets.only(bottom: 16),
+                child: TextButton(
+                  onPressed: () {
+                    setState(() => _currentPage++);
+                  },
+                  child: const Text('Load More'),
                 ),
               ),
-            );
-          },
-        );
-      },
+            ),
+          ),
+      ],
     );
   }
 
@@ -489,6 +549,8 @@ class _SeriesCardState extends State<_SeriesCard> {
                             ),
                             child: Image.network(
                               widget.series.posterUrl,
+                              cacheWidth: 300,
+                              cacheHeight: 450,
                               fit: BoxFit.cover,
                               errorBuilder: (_, __, ___) => Container(
                                 color: Colors.white10,

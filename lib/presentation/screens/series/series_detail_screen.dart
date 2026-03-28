@@ -239,40 +239,49 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
     return h > 0 ? '$h:$m:$s' : '${d.inMinutes}:$s';
   }
 
+  double _getFontSize(BuildContext context, double base) {
+    final width = MediaQuery.of(context).size.width;
+    if (width >= 900) return base;
+    return base * 0.85;
+  }
+
   @override
   Widget build(BuildContext context) {
     final episodes = _episodesBySeason[_selectedSeason] ?? <Map<String, dynamic>>[];
 
-    return Scaffold(
-      backgroundColor: const Color(0xFF121212),
-      appBar: AppBar(
-        backgroundColor: const Color(0xFF0F0F1A),
-        elevation: 0,
-        leading: BackButton(color: Colors.white.withValues(alpha: 0.9)),
-      ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : SingleChildScrollView(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildHeroHeader(),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 18, 16, 24),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _buildInfoSection(),
-                        const SizedBox(height: 18),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: FilledButton.icon(
+    return PopScope(
+      canPop: true,
+      child: Scaffold(
+        backgroundColor: const Color(0xFF121212),
+        appBar: AppBar(
+          backgroundColor: const Color(0xFF0F0F1A),
+          elevation: 0,
+          leading: BackButton(color: Colors.white.withValues(alpha: 0.9)),
+        ),
+        body: _loading
+            ? const Center(child: CircularProgressIndicator())
+            : SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildHeroHeader(),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 18, 16, 24),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _buildInfoSection(),
+                          const SizedBox(height: 18),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: [
+                              FilledButton.icon(
                                 icon: Icon(_isFavorite ? Icons.favorite : Icons.favorite_border),
                                 label: Text(_isFavorite ? 'Remove from Favorites' : 'Add to Favorites'),
                                 style: FilledButton.styleFrom(
                                   backgroundColor: _isFavorite ? Colors.red : null,
-                                  padding: const EdgeInsets.symmetric(vertical: 12),
+                                  padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
                                 ),
                                 onPressed: () async {
                                   if (_isFavorite) {
@@ -296,57 +305,55 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
                                   }
                                 },
                               ),
-                            ),
-                            if (_trailerUrl.trim().isNotEmpty) ...[
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: ElevatedButton.icon(
+                              if (_trailerUrl.trim().isNotEmpty)
+                                ElevatedButton.icon(
                                   onPressed: _openTrailer,
                                   style: ElevatedButton.styleFrom(
                                     backgroundColor: const Color(0xFF00A86B),
                                     foregroundColor: Colors.white,
-                                    padding: const EdgeInsets.symmetric(vertical: 12),
+                                    padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
                                   ),
                                   icon: const Icon(Icons.ondemand_video, size: 18),
                                   label: const Text('Play Trailer'),
                                 ),
-                              ),
                             ],
-                          ],
-                        ),
-                        const SizedBox(height: 18),
-                        _buildSeasons(),
-                        const SizedBox(height: 12),
-                        if (episodes.isEmpty)
-                          const Padding(
-                            padding: EdgeInsets.symmetric(vertical: 24),
-                            child: Center(
-                              child: Text(
-                                'No episodes found',
-                                style: TextStyle(color: Colors.white54),
+                          ),
+                          const SizedBox(height: 18),
+                          _buildSeasons(),
+                          const SizedBox(height: 12),
+                          if (episodes.isEmpty)
+                            const Padding(
+                              padding: EdgeInsets.symmetric(vertical: 24),
+                              child: Center(
+                                child: Text(
+                                  'No episodes found',
+                                  style: TextStyle(color: Colors.white54),
+                                ),
                               ),
-                            ),
-                          )
-                        else
-                          _buildEpisodesList(episodes),
-                      ],
+                            )
+                          else
+                            _buildEpisodesList(episodes),
+                        ],
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
+      ),
     );
   }
 
   Widget _buildHeroHeader() {
     return SizedBox(
-      height: 320,
+      height: MediaQuery.of(context).size.height * 0.35,
       width: double.infinity,
       child: Stack(
         fit: StackFit.expand,
         children: [
           Image.network(
             _cover,
+            cacheWidth: 300,
+            cacheHeight: 450,
             fit: BoxFit.cover,
             errorBuilder: (_, __, ___) => Container(
               color: const Color(0xFF171717),
@@ -375,9 +382,9 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
               _title,
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
+              style: TextStyle(
                 color: Colors.white,
-                fontSize: 30,
+                fontSize: _getFontSize(context, 30),
                 fontWeight: FontWeight.w800,
                 letterSpacing: 0.2,
               ),
@@ -402,16 +409,16 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
           ],
         ),
         const SizedBox(height: 16),
-        const Text(
+        Text(
           'Plot',
-          style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700),
+          style: TextStyle(color: Colors.white, fontSize: _getFontSize(context, 16), fontWeight: FontWeight.w700),
         ),
         const SizedBox(height: 6),
         Text(
           _plot.isEmpty ? 'No description available.' : _plot,
           maxLines: _isPlotExpanded ? null : 4,
           overflow: _isPlotExpanded ? TextOverflow.visible : TextOverflow.ellipsis,
-          style: const TextStyle(color: Colors.white70, fontSize: 14, height: 1.45),
+          style: TextStyle(color: Colors.white70, fontSize: _getFontSize(context, 14), height: 1.45),
         ),
         if (_plot.length > 210)
           TextButton(
@@ -420,9 +427,9 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
             child: Text(_isPlotExpanded ? 'Read less' : 'Read more'),
           ),
         const SizedBox(height: 12),
-        const Text(
+        Text(
           'Cast',
-          style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700),
+          style: TextStyle(color: Colors.white, fontSize: _getFontSize(context, 16), fontWeight: FontWeight.w700),
         ),
         const SizedBox(height: 8),
         SizedBox(
@@ -439,7 +446,7 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
                     side: BorderSide.none,
                     label: Text(
                       _castMembers[index],
-                      style: const TextStyle(color: Colors.white70, fontSize: 12),
+                      style: TextStyle(color: Colors.white70, fontSize: _getFontSize(context, 12)),
                     ),
                   ),
                   separatorBuilder: (_, __) => const SizedBox(width: 8),
