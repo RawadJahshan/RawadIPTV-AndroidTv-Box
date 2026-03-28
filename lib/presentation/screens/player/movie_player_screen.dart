@@ -41,6 +41,7 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
   Duration _position = Duration.zero;
   Duration _duration = Duration.zero;
   DateTime? _lastProgressSaveAt;
+  bool get _isSeriesPlayback => widget.seriesId != null;
 
   void _syncPlaybackState() {
     final state = _ctrl.playbackState.value;
@@ -91,7 +92,9 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
         });
       } else {
         setState(() {
-          _errorMessage = 'Playback error. Please try another stream.';
+          _errorMessage = _isSeriesPlayback
+              ? 'Episode playback error. Please go back and try another episode.'
+              : 'Playback error. Please go back and try another stream.';
           _show4KDialog = false;
         });
       }
@@ -259,8 +262,10 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
                               size: 48,
                             ),
                             const SizedBox(height: 16),
-                            const Text(
-                              '4K Not Supported',
+                            Text(
+                              _isSeriesPlayback
+                                  ? '4K Episode Not Supported'
+                                  : '4K Not Supported',
                               style: TextStyle(
                                 color: Colors.white,
                                 fontSize: 20,
@@ -268,9 +273,12 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
                               ),
                             ),
                             const SizedBox(height: 12),
-                            const Text(
-                              'Your device does not support 4K playback.\n\n'
-                              'Please go back and choose another stream.',
+                            Text(
+                              _isSeriesPlayback
+                                  ? 'Your device does not support 4K playback for this episode.\n\n'
+                                        'Please go back and choose another episode.'
+                                  : 'Your device does not support 4K playback.\n\n'
+                                        'Please go back and choose another stream.',
                               style: TextStyle(
                                 color: Colors.white70,
                                 fontSize: 14,
