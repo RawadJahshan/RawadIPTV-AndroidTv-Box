@@ -35,8 +35,8 @@ class MoviePlayerScreen extends StatefulWidget {
 class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
   late ThaNativePlayerController _ctrl;
   Timer? _progressTimer;
-  bool _triedFallback = false;
   String? _errorMessage;
+  bool _show4KDialog = false;
 
   Duration _position = Duration.zero;
   Duration _duration = Duration.zero;
@@ -59,11 +59,12 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
       ),
       autoPlay: true,
     );
+
     _ctrl.playbackState.addListener(_syncPlaybackState);
 
     if (widget.startAt != null && widget.startAt! > Duration.zero) {
       Future.delayed(const Duration(seconds: 2), () {
-        _ctrl.seekTo(widget.startAt!);
+        if (mounted) _ctrl.seekTo(widget.startAt!);
       });
     }
 
@@ -71,83 +72,30 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
         Timer.periodic(const Duration(seconds: 5), (_) => _saveProgress());
   }
 
-  void _show4KFallbackDialog() {
+  void _onError(String? error) {
     if (!mounted) return;
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => AlertDialog(
-        backgroundColor: const Color(0xFF1E1E2E),
-        title: const Text(
-          '4K Not Supported',
-          style: TextStyle(color: Colors.white),
-        ),
-        content: const Text(
-          'Your device does not support 4K playback.\n\n'
-          'Would you like to try playing at 1080p instead?',
-          style: TextStyle(color: Colors.white70),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.of(context).pop();
-              Navigator.of(context).pop();
-            },
-            child: const Text(
-              'Go Back',
-              style: TextStyle(color: Colors.white54),
-            ),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.of(context).pop();
-              unawaited(_retryAt1080p());
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.blue,
-            ),
-            child: const Text('Play 1080p'),
-          ),
-        ],
-      ),
-    );
-  }
+    final errorStr = error ?? '';
 
-  Future<void> _retryAt1080p() async {
-    if (!mounted) return;
-    _triedFallback = true;
+    final is4KError = errorStr.contains('NO_EXCEEDS_CAPABILITIES') ||
+        errorStr.contains('EXCEEDS_CAPABILITIES') ||
+        errorStr.contains('format_supported=NO') ||
+        (errorStr.contains('hevc') && errorStr.contains('3840'));
 
-    try {
-      _ctrl.playbackState.removeListener(_syncPlaybackState);
-    } catch (_) {}
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
 
-    try {
-      _ctrl.dispose();
-    } catch (_) {}
-
-    final fallbackUrl = widget.streamUrl
-        .replaceAll('.mkv', '.m3u8')
-        .replaceAll('.mp4', '.m3u8');
-
-    setState(() {
-      _errorMessage = null;
+      if (is4KError) {
+        setState(() {
+          _show4KDialog = true;
+          _errorMessage = null;
+        });
+      } else {
+        setState(() {
+          _errorMessage = 'Playback error. Please try another stream.';
+          _show4KDialog = false;
+        });
+      }
     });
-
-    _ctrl = ThaNativePlayerController.single(
-      ThaMediaSource(
-        fallbackUrl,
-        headers: const {
-          'User-Agent': 'Mozilla/5.0 (Linux; Android 10)',
-          'Connection': 'keep-alive',
-        },
-      ),
-      autoPlay: true,
-    );
-    _ctrl.playbackState.addListener(_syncPlaybackState);
-
-    if (mounted) {
-      setState(() {});
-    }
   }
 
   void _restoreLandscapeAndSystemUi() {
@@ -168,9 +116,7 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
       DeviceOrientation.landscapeLeft,
       DeviceOrientation.landscapeRight,
     ]);
-    SystemChrome.setEnabledSystemUIMode(
-      SystemUiMode.immersiveSticky,
-    );
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
     _initPlayer();
   }
 
@@ -214,8 +160,10 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
     _restoreLandscapeAndSystemUi();
     _progressTimer?.cancel();
     unawaited(_saveProgress(force: true));
-    _ctrl.playbackState.removeListener(_syncPlaybackState);
-    _ctrl.dispose();
+    try {
+      _ctrl.playbackState.removeListener(_syncPlaybackState);
+      _ctrl.dispose();
+    } catch (_) {}
     super.dispose();
   }
 
@@ -231,120 +179,165 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
       },
       child: Scaffold(
         backgroundColor: Colors.black,
-        body: Stack(
-          children: [
-            ThaModernPlayer(
-              controller: _ctrl,
-              doubleTapSeek: const Duration(seconds: 10),
-              autoHideAfter: const Duration(seconds: 3),
-              initialBoxFit: BoxFit.contain,
-              autoFullscreen: true,
-              onError: (error) {
-                if (!mounted) return;
-                final is4KError = (error ?? '').contains('EXCEEDS') ||
-                    (error ?? '').contains('hevc') ||
-                    (error ?? '').contains('3840');
-                if (is4KError && !_triedFallback) {
-                  _show4KFallbackDialog();
-                } else {
-                  setState(() {
-                    _errorMessage = error ?? 'Playback error';
-                  });
-                }
-              },
-              overlay: Stack(
-                children: [
-                  Positioned(
-                    top: 0,
-                    left: 0,
-                    right: 60,
-                    child: SafeArea(
-                      child: Padding(
-                        padding: const EdgeInsets.all(12),
-                        child: Text(
-                          widget.title,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 15,
-                            fontWeight: FontWeight.w600,
-                            shadows: [
-                              Shadow(
-                                color: Colors.black54,
-                                blurRadius: 4,
-                              ),
-                            ],
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    ),
-                  ),
-                  Positioned(
-                    top: 0,
-                    right: 0,
-                    child: SafeArea(
-                      child: IconButton(
-                        icon: const Icon(
-                          Icons.close,
-                          color: Colors.white,
-                          size: 28,
-                        ),
-                        onPressed: () => Navigator.of(context).pop(),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Positioned(
-              bottom: 8,
-              right: 8,
-              child: SizedBox(
-                width: 48,
-                height: 48,
-                child: GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTap: () {},
-                ),
-              ),
-            ),
-            if (_errorMessage != null)
+        body: SizedBox.expand(
+          child: Stack(
+            children: [
               Positioned.fill(
-                child: Container(
-                  color: Colors.black87,
-                  child: Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const Icon(
-                          Icons.error_outline,
-                          color: Colors.red,
-                          size: 64,
-                        ),
-                        const SizedBox(height: 16),
-                        Text(
-                          _errorMessage!,
-                          style: const TextStyle(
-                            color: Colors.white70,
-                            fontSize: 16,
+                child: ThaModernPlayer(
+                  controller: _ctrl,
+                  doubleTapSeek: const Duration(seconds: 10),
+                  autoHideAfter: const Duration(seconds: 3),
+                  initialBoxFit: BoxFit.contain,
+                  autoFullscreen: false,
+                  isFullscreen: true,
+                  onError: _onError,
+                  overlay: Stack(
+                    children: [
+                      Positioned(
+                        top: 0,
+                        left: 0,
+                        right: 60,
+                        child: SafeArea(
+                          child: Padding(
+                            padding: const EdgeInsets.all(12),
+                            child: Text(
+                              widget.title,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 15,
+                                fontWeight: FontWeight.w600,
+                                shadows: [
+                                  Shadow(
+                                    color: Colors.black54,
+                                    blurRadius: 4,
+                                  ),
+                                ],
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
                           ),
-                          textAlign: TextAlign.center,
                         ),
-                        const SizedBox(height: 24),
-                        ElevatedButton(
-                          onPressed: () => Navigator.of(context).pop(),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.red,
+                      ),
+                      Positioned(
+                        top: 0,
+                        right: 0,
+                        child: SafeArea(
+                          child: IconButton(
+                            icon: const Icon(
+                              Icons.close,
+                              color: Colors.white,
+                              size: 28,
+                            ),
+                            onPressed: () => Navigator.of(context).pop(),
                           ),
-                          child: const Text('Go Back'),
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
                 ),
               ),
-          ],
+
+              if (_show4KDialog)
+                Positioned.fill(
+                  child: Container(
+                    color: Colors.black87,
+                    child: Center(
+                      child: Container(
+                        margin: const EdgeInsets.all(32),
+                        padding: const EdgeInsets.all(24),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF1E1E2E),
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(
+                              Icons.warning_amber_rounded,
+                              color: Colors.orange,
+                              size: 48,
+                            ),
+                            const SizedBox(height: 16),
+                            const Text(
+                              '4K Not Supported',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            const Text(
+                              'Your device does not support 4K playback.\n\n'
+                              'Please go back and choose another stream.',
+                              style: TextStyle(
+                                color: Colors.white70,
+                                fontSize: 14,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                            const SizedBox(height: 24),
+                            SizedBox(
+                              width: double.infinity,
+                              child: ElevatedButton(
+                                onPressed: () => Navigator.of(context).pop(),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.blue,
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 14,
+                                  ),
+                                ),
+                                child: const Text('Go Back'),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+
+              if (_errorMessage != null)
+                Positioned.fill(
+                  child: Container(
+                    color: Colors.black87,
+                    child: Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(
+                            Icons.error_outline,
+                            color: Colors.red,
+                            size: 64,
+                          ),
+                          const SizedBox(height: 16),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 32),
+                            child: Text(
+                              _errorMessage!,
+                              style: const TextStyle(
+                                color: Colors.white70,
+                                fontSize: 16,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+                          const SizedBox(height: 24),
+                          ElevatedButton(
+                            onPressed: () => Navigator.of(context).pop(),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.red,
+                            ),
+                            child: const Text('Go Back'),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
         ),
       ),
     );
