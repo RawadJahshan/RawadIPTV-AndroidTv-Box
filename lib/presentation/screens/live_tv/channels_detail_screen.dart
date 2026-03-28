@@ -48,6 +48,13 @@ class _ChannelsDetailScreenState extends State<ChannelsDetailScreen> {
   @override
   void initState() {
     super.initState();
+    SystemChrome.setPreferredOrientations([
+      DeviceOrientation.landscapeLeft,
+      DeviceOrientation.landscapeRight,
+    ]);
+    SystemChrome.setEnabledSystemUIMode(
+      SystemUiMode.immersiveSticky,
+    );
 
     _player = Player(
       configuration: const PlayerConfiguration(
@@ -308,6 +315,7 @@ class _ChannelsDetailScreenState extends State<ChannelsDetailScreen> {
       SystemUiMode.manual,
       overlays: SystemUiOverlay.values,
     );
+    // Force landscape — never portrait
     await SystemChrome.setPreferredOrientations([
       DeviceOrientation.landscapeLeft,
       DeviceOrientation.landscapeRight,
@@ -316,6 +324,14 @@ class _ChannelsDetailScreenState extends State<ChannelsDetailScreen> {
 
   @override
   void dispose() {
+    SystemChrome.setPreferredOrientations([
+      DeviceOrientation.landscapeLeft,
+      DeviceOrientation.landscapeRight,
+    ]);
+    SystemChrome.setEnabledSystemUIMode(
+      SystemUiMode.manual,
+      overlays: SystemUiOverlay.values,
+    );
     _fallbackTimer?.cancel();
     _retryTimer?.cancel();
     _bufferingSubscription?.cancel();
@@ -324,12 +340,20 @@ class _ChannelsDetailScreenState extends State<ChannelsDetailScreen> {
     _errorSubscription?.cancel();
     _player.dispose();
     super.dispose();
-  }  @override
+  }
+
+  @override
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
 
-    return PopScope(
-      canPop: true,
+    return WillPopScope(
+      onWillPop: () async {
+        await SystemChrome.setPreferredOrientations([
+          DeviceOrientation.landscapeLeft,
+          DeviceOrientation.landscapeRight,
+        ]);
+        return true;
+      },
       child: Scaffold(
         backgroundColor: const Color(0xFF1E1E1E),
         appBar: AppBar(
