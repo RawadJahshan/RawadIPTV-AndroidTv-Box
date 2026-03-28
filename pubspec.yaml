@@ -39,26 +39,12 @@ dependencies:
   dio: ^5.9.2
   shared_preferences: ^2.5.4
   flutter_secure_storage: ^9.0.0
-  dart_vlc:
-    git:
-      url: https://github.com/RawadJahshan/dart_vlc.git
-      ref: cb4dcc47fc87beb149ecff78b19428babb096c99
   intl: ^0.20.2
-  video_player: ^2.5.1
   media_kit: ^1.1.10
   media_kit_video: ^1.2.4
-  media_kit_libs_windows_video: ^1.0.4
+  media_kit_libs_android_video: ^1.0.4
   url_launcher: ^6.3.2
-  window_manager: ^0.4.0
 
-dependency_overrides:
-  audio_video_progress_bar: ^2.0.0
-  dart_vlc_ffi:
-    git:
-      url: https://github.com/RawadJahshan/dart_vlc.git
-      ref: cb4dcc47fc87beb149ecff78b19428babb096c99
-      path: ffi
-  
 dev_dependencies:
   flutter_test:
     sdk: flutter
