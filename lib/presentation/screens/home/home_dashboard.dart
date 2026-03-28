@@ -20,49 +20,43 @@ class HomeDashboard extends StatelessWidget {
     required this.xtreamApi,
   });
 
-  Widget buildTile({
+  Widget _buildMenuCard(
+    BuildContext context, {
     required String label,
     required IconData icon,
-    required Color startColor,
-    required Color endColor,
     required VoidCallback onTap,
   }) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(16),
-      child: Container(
-        width: 160,
-        height: 160,
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: [startColor, endColor],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
+    final cardHeight = MediaQuery.of(context).size.height * 0.35;
+    return Expanded(
+      child: Padding(
+        padding: const EdgeInsets.all(8),
+        child: InkWell(
+          onTap: onTap,
           borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.4),
-              offset: const Offset(0, 6),
-              blurRadius: 12,
+          child: Container(
+            height: cardHeight,
+            decoration: BoxDecoration(
+              color: Colors.white10,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: Colors.white24),
             ),
-          ],
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icon, size: 72, color: Colors.white),
-            const SizedBox(height: 16),
-            Text(
-              label,
-              style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w600,
-                fontSize: 22,
-                letterSpacing: 1.3,
-              ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(icon, size: 48, color: Colors.white),
+                const SizedBox(height: 12),
+                Text(
+                  label,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );
@@ -75,146 +69,127 @@ class HomeDashboard extends StatelessWidget {
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 36, vertical: 24),
-          child: Stack(
+          child: Column(
             children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              Row(
                 children: [
-                  const Text(
-                    "IPTV Rawad J",
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 34,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 1.1,
-                    ),
-                  ),
-                  const SizedBox(height: 40),
-                  Expanded(
-                    child: Center(
-                      child: Wrap(
-                        alignment: WrapAlignment.center,
-                        spacing: 48,
-                        runSpacing: 48,
-                        children: [
-                          buildTile(
-                            label: 'LIVE TV',
-                            icon: Icons.live_tv,
-                            startColor: const Color(0xFF00c6ff),
-                            endColor: const Color(0xFF0072ff),
-                            onTap: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => LiveTvCategoriesScreen(xtreamApi: xtreamApi),
-                                ),
-                              );
-                            },
-                          ),
-                          buildTile(
-                            label: 'MOVIES',
-                            icon: Icons.movie,
-                            startColor: const Color(0xFF00c6ff),
-                            endColor: const Color(0xFF0072ff),
-                            onTap: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => MoviesScreen(xtreamApi: xtreamApi),
-                                ),
-                              );
-                            },
-                          ),
-                          buildTile(
-                            label: 'SERIES',
-                            icon: Icons.tv,
-                            startColor: const Color(0xFF00c6ff),
-                            endColor: const Color(0xFF0072ff),
-                            onTap: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => SeriesCategoriesScreen(xtreamApi: xtreamApi),
-                                ),
-                              );
-                            },
-                          ),
-                          buildTile(
-                            label: 'FAVORITES',
-                            icon: Icons.favorite,
-                            startColor: const Color(0xFFe91e63),
-                            endColor: const Color(0xFFc2185b),
-                            onTap: () {
-                              Navigator.pushNamed(context, '/favorites', arguments: xtreamApi);
-                            },
-                          ),
-                          buildTile(
-                            label: 'CATCH UP',
-                            icon: Icons.history,
-                            startColor: const Color(0xFF2f9c95),
-                            endColor: const Color(0xFF2c5d63),
-                            onTap: () {},
-                          ),
-                          buildTile(
-                            label: 'MULTISCREEN',
-                            icon: Icons.grid_view,
-                            startColor: const Color(0xFF4b6cb7),
-                            endColor: const Color(0xFF182848),
-                            onTap: () {},
-                          ),
-                          buildTile(
-                            label: 'SETTINGS',
-                            icon: Icons.settings,
-                            startColor: const Color(0xFF06beb6),
-                            endColor: const Color(0xFF48b1bf),
-                            onTap: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => const SettingsScreen(),
-                                ),
-                              );
-                            },
-                          ),
-                        ],
+                  ElevatedButton.icon(
+                    onPressed: () {
+                      Navigator.pushReplacement(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const ProfilesScreen(),
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.switch_account, size: 18),
+                    label: const Text('Switch Profile'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF1A1A2E),
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
                       ),
                     ),
+                  ),
+                  const Spacer(),
+                  Text(
+                    username,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 30,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const Spacer(),
+                  Row(
+                    children: [
+                      const _DateTimeWidget(),
+                      IconButton(
+                        icon: const Icon(Icons.settings, color: Colors.white),
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const SettingsScreen(),
+                            ),
+                          );
+                        },
+                      ),
+                    ],
                   ),
                 ],
               ),
-              Positioned(
-                top: 24,
-                right: 36,
-                child: _DateTimeWidget(),
-              ),
-              Positioned(
-                top: 24,
-                left: 0,
-                child: ElevatedButton.icon(
-                  onPressed: () {
-                    Navigator.pushReplacement(
+              const SizedBox(height: 16),
+              Expanded(
+                child: Row(
+                  children: [
+                    _buildMenuCard(
                       context,
-                      MaterialPageRoute(
-                        builder: (_) => const ProfilesScreen(),
-                      ),
-                    );
-                  },
-                  icon: const Icon(Icons.switch_account, size: 18),
-                  label: const Text('Switch Profile'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF1A1A2E),
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
+                      label: 'LIVE TV',
+                      icon: Icons.live_tv,
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => LiveTvCategoriesScreen(xtreamApi: xtreamApi),
+                          ),
+                        );
+                      },
                     ),
-                  ),
+                    _buildMenuCard(
+                      context,
+                      label: 'MOVIES',
+                      icon: Icons.movie,
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => MoviesScreen(xtreamApi: xtreamApi),
+                          ),
+                        );
+                      },
+                    ),
+                    _buildMenuCard(
+                      context,
+                      label: 'SERIES',
+                      icon: Icons.tv,
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => SeriesCategoriesScreen(xtreamApi: xtreamApi),
+                          ),
+                        );
+                      },
+                    ),
+                    _buildMenuCard(
+                      context,
+                      label: 'FAVORITES',
+                      icon: Icons.favorite,
+                      onTap: () => Navigator.pushNamed(context, '/favorites', arguments: xtreamApi),
+                    ),
+                    _buildMenuCard(
+                      context,
+                      label: 'SETTINGS',
+                      icon: Icons.settings,
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const SettingsScreen(),
+                          ),
+                        );
+                      },
+                    ),
+                  ],
                 ),
               ),
-              Positioned(
-                bottom: 24,
-                right: 36,
+              const SizedBox(height: 16),
+              Align(
+                alignment: Alignment.bottomRight,
                 child: Text(
-                  'Logged in: $username\nExpiration: $expiryDate',
+                  'Expiration: $expiryDate',
                   textAlign: TextAlign.right,
                   style: const TextStyle(
                     color: Colors.white70,
@@ -222,7 +197,7 @@ class HomeDashboard extends StatelessWidget {
                     height: 1.5,
                   ),
                 ),
-              )
+              ),
             ],
           ),
         ),
@@ -232,6 +207,8 @@ class HomeDashboard extends StatelessWidget {
 }
 
 class _DateTimeWidget extends StatefulWidget {
+  const _DateTimeWidget();
+
   @override
   State<_DateTimeWidget> createState() => _DateTimeWidgetState();
 }

@@ -260,84 +260,109 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
         ),
         body: _loading
             ? const Center(child: CircularProgressIndicator())
-            : SingleChildScrollView(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _buildHeroHeader(),
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 18, 16, 24),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+            : OrientationBuilder(
+                builder: (context, orientation) {
+                  final detailsContent = Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildInfoSection(),
+                      const SizedBox(height: 18),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
                         children: [
-                          _buildInfoSection(),
-                          const SizedBox(height: 18),
-                          Wrap(
-                            spacing: 8,
-                            runSpacing: 8,
-                            children: [
-                              FilledButton.icon(
-                                icon: Icon(_isFavorite ? Icons.favorite : Icons.favorite_border),
-                                label: Text(_isFavorite ? 'Remove from Favorites' : 'Add to Favorites'),
-                                style: FilledButton.styleFrom(
-                                  backgroundColor: _isFavorite ? Colors.red : null,
-                                  padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
-                                ),
-                                onPressed: () async {
-                                  if (_isFavorite) {
-                                    await FavoritesService.remove(widget.seriesId, FavoriteType.series);
-                                    if (mounted) {
-                                      setState(() => _isFavorite = false);
-                                    }
-                                  } else {
-                                    await FavoritesService.add(
-                                      FavoriteEntry(
-                                        id: widget.seriesId,
-                                        name: _title.isEmpty ? widget.seriesName : _title,
-                                        poster: _cover,
-                                        type: FavoriteType.series,
-                                        addedAt: DateTime.now(),
-                                      ),
-                                    );
-                                    if (mounted) {
-                                      setState(() => _isFavorite = true);
-                                    }
-                                  }
-                                },
-                              ),
-                              if (_trailerUrl.trim().isNotEmpty)
-                                ElevatedButton.icon(
-                                  onPressed: _openTrailer,
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: const Color(0xFF00A86B),
-                                    foregroundColor: Colors.white,
-                                    padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
+                          FilledButton.icon(
+                            icon: Icon(_isFavorite ? Icons.favorite : Icons.favorite_border),
+                            label: Text(_isFavorite ? 'Remove from Favorites' : 'Add to Favorites'),
+                            style: FilledButton.styleFrom(
+                              backgroundColor: _isFavorite ? Colors.red : null,
+                              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
+                            ),
+                            onPressed: () async {
+                              if (_isFavorite) {
+                                await FavoritesService.remove(widget.seriesId, FavoriteType.series);
+                                if (mounted) {
+                                  setState(() => _isFavorite = false);
+                                }
+                              } else {
+                                await FavoritesService.add(
+                                  FavoriteEntry(
+                                    id: widget.seriesId,
+                                    name: _title.isEmpty ? widget.seriesName : _title,
+                                    poster: _cover,
+                                    type: FavoriteType.series,
+                                    addedAt: DateTime.now(),
                                   ),
-                                  icon: const Icon(Icons.ondemand_video, size: 18),
-                                  label: const Text('Play Trailer'),
-                                ),
-                            ],
+                                );
+                                if (mounted) {
+                                  setState(() => _isFavorite = true);
+                                }
+                              }
+                            },
                           ),
-                          const SizedBox(height: 18),
-                          _buildSeasons(),
-                          const SizedBox(height: 12),
-                          if (episodes.isEmpty)
-                            const Padding(
-                              padding: EdgeInsets.symmetric(vertical: 24),
-                              child: Center(
-                                child: Text(
-                                  'No episodes found',
-                                  style: TextStyle(color: Colors.white54),
-                                ),
+                          if (_trailerUrl.trim().isNotEmpty)
+                            ElevatedButton.icon(
+                              onPressed: _openTrailer,
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF00A86B),
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
                               ),
-                            )
-                          else
-                            _buildEpisodesList(episodes),
+                              icon: const Icon(Icons.ondemand_video, size: 18),
+                              label: const Text('Play Trailer'),
+                            ),
                         ],
                       ),
+                      const SizedBox(height: 18),
+                      _buildSeasons(),
+                      const SizedBox(height: 12),
+                      if (episodes.isEmpty)
+                        const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 24),
+                          child: Center(
+                            child: Text(
+                              'No episodes found',
+                              style: TextStyle(color: Colors.white54),
+                            ),
+                          ),
+                        )
+                      else
+                        _buildEpisodesList(episodes),
+                    ],
+                  );
+                  if (orientation == Orientation.landscape) {
+                    return Row(
+                      children: [
+                        SizedBox(
+                          width: MediaQuery.of(context).size.width * 0.4,
+                          child: _buildHeroHeader(),
+                        ),
+                        Expanded(
+                          child: SingleChildScrollView(
+                            physics: const BouncingScrollPhysics(),
+                            child: Padding(
+                              padding: const EdgeInsets.fromLTRB(16, 18, 16, 24),
+                              child: detailsContent,
+                            ),
+                          ),
+                        ),
+                      ],
+                    );
+                  }
+                  return SingleChildScrollView(
+                    physics: const BouncingScrollPhysics(),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _buildHeroHeader(),
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 18, 16, 24),
+                          child: detailsContent,
+                        ),
+                      ],
                     ),
-                  ],
-                ),
+                  );
+                },
               ),
       ),
     );
@@ -345,15 +370,18 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
 
   Widget _buildHeroHeader() {
     return SizedBox(
-      height: MediaQuery.of(context).size.height * 0.35,
+      height: MediaQuery.of(context).orientation == Orientation.landscape
+          ? double.infinity
+          : MediaQuery.of(context).size.height * 0.35,
       width: double.infinity,
       child: Stack(
         fit: StackFit.expand,
         children: [
           Image.network(
             _cover,
-            cacheWidth: 300,
+            cacheWidth: 400,
             cacheHeight: 450,
+            filterQuality: FilterQuality.low,
             fit: BoxFit.cover,
             errorBuilder: (_, __, ___) => Container(
               color: const Color(0xFF171717),
@@ -440,6 +468,7 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
                   child: Text('N/A', style: TextStyle(color: Colors.white54)),
                 )
               : ListView.separated(
+                  physics: const BouncingScrollPhysics(),
                   scrollDirection: Axis.horizontal,
                   itemBuilder: (context, index) => Chip(
                     backgroundColor: const Color(0xFF1F2430),
@@ -467,6 +496,7 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
     return SizedBox(
       height: 38,
       child: ListView.separated(
+        physics: const BouncingScrollPhysics(),
         scrollDirection: Axis.horizontal,
         itemCount: _seasons.length,
         separatorBuilder: (_, __) => const SizedBox(width: 8),

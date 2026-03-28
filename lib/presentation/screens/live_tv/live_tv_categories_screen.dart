@@ -150,40 +150,32 @@ class _LiveTvCategoriesScreenState
                           style: TextStyle(color: Colors.white38),
                         ),
                       )
-                    : ListView.separated(
-                        padding:
-                            const EdgeInsets.fromLTRB(12, 8, 12, 16),
-                        separatorBuilder: (_, __) =>
-                                                        const Divider(color: Colors.white12),
-                        itemCount: filtered.length,
-                        itemBuilder: (context, index) {
-                          final category = filtered[index];
-                          return ListTile(
-                            minTileHeight: 56,
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                            leading: const Icon(
-                              Icons.live_tv,
-                              color: Color(0xFF00c6ff),
-                            ),
-                            title: Text(
-                              category.name,
-                              style: TextStyle(color: Colors.white, fontSize: getFontSize(16)),
-                            ),
-                            trailing: const Icon(
-                              Icons.arrow_forward_ios,
-                              color: Colors.white38,
-                              size: 14,
-                            ),
-                            onTap: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => ChannelsDetailScreen(
-                                    xtreamApi: widget.xtreamApi,
-                                    category: category,
-                                  ),
-                                ),
-                              );
+                    : OrientationBuilder(
+                        builder: (context, orientation) {
+                          final isLandscape = orientation == Orientation.landscape;
+                          if (isLandscape) {
+                            return GridView.builder(
+                              physics: const BouncingScrollPhysics(),
+                              padding: const EdgeInsets.fromLTRB(12, 8, 12, 16),
+                              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                                crossAxisCount: 2,
+                                mainAxisSpacing: 8,
+                                crossAxisSpacing: 8,
+                                mainAxisExtent: 56,
+                              ),
+                              itemCount: filtered.length,
+                              itemBuilder: (context, index) {
+                                return _buildCategoryTile(filtered[index], getFontSize);
+                              },
+                            );
+                          }
+                          return ListView.separated(
+                            physics: const BouncingScrollPhysics(),
+                            padding: const EdgeInsets.fromLTRB(12, 8, 12, 16),
+                            separatorBuilder: (_, __) => const Divider(color: Colors.white12),
+                            itemCount: filtered.length,
+                            itemBuilder: (context, index) {
+                              return _buildCategoryTile(filtered[index], getFontSize);
                             },
                           );
                         },
@@ -194,6 +186,37 @@ class _LiveTvCategoriesScreenState
         },
       ),
       ),
+    );
+  }
+
+  Widget _buildCategoryTile(LiveTvCategory category, double Function(double) getFontSize) {
+    return ListTile(
+      minTileHeight: 56,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      leading: const Icon(
+        Icons.live_tv,
+        color: Color(0xFF00c6ff),
+      ),
+      title: Text(
+        category.name,
+        style: TextStyle(color: Colors.white, fontSize: getFontSize(16)),
+      ),
+      trailing: const Icon(
+        Icons.arrow_forward_ios,
+        color: Colors.white38,
+        size: 14,
+      ),
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => ChannelsDetailScreen(
+              xtreamApi: widget.xtreamApi,
+              category: category,
+            ),
+          ),
+        );
+      },
     );
   }
 }

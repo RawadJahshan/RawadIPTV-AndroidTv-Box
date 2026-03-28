@@ -203,10 +203,12 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
         child: Stack(
           children: [
             Positioned.fill(
-              child: Video(
-                controller: _controller,
-                fit: _aspectRatios[_aspectRatioIndex]['ratio'] as BoxFit,
-                controls: NoVideoControls,
+              child: RepaintBoundary(
+                child: Video(
+                  controller: _controller,
+                  fit: _aspectRatios[_aspectRatioIndex]['ratio'] as BoxFit,
+                  controls: NoVideoControls,
+                ),
               ),
             ),
             if (_isBuffering || _isSeeking)

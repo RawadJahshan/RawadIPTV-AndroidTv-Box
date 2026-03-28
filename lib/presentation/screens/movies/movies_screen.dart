@@ -123,30 +123,34 @@ class _MoviesScreenState extends State<MoviesScreen> {
                 ),
               ),
               Expanded(
-                child: ListView.separated(
-                  padding: const EdgeInsets.fromLTRB(12, 8, 12, 16),
-                  separatorBuilder: (_, __) => const Divider(color: Colors.white12),
-                  itemCount: visibleCategories.length,
-                  itemBuilder: (context, index) {
-                    final category = visibleCategories[index];
-                    return ListTile(
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                      minTileHeight: 56,
-                      title: Text(
-                        category.name,
-                        style: TextStyle(color: Colors.white, fontSize: _getFontSize(context, 16)),
-                      ),
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => MovieListScreen(
-                              xtreamApi: widget.xtreamApi,
-                              categoryId: category.id,
-                              categoryName: category.name,
-                            ),
-                          ),
-                        );
+                child: OrientationBuilder(
+                  builder: (context, orientation) {
+                    final isLandscape = orientation == Orientation.landscape;
+                    if (isLandscape) {
+                      return GridView.builder(
+                        physics: const BouncingScrollPhysics(),
+                        padding: const EdgeInsets.fromLTRB(12, 8, 12, 16),
+                        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: 2,
+                          mainAxisSpacing: 8,
+                          crossAxisSpacing: 8,
+                          mainAxisExtent: 56,
+                        ),
+                        itemCount: visibleCategories.length,
+                        itemBuilder: (context, index) {
+                          final category = visibleCategories[index];
+                          return _buildCategoryTile(category);
+                        },
+                      );
+                    }
+                    return ListView.separated(
+                      physics: const BouncingScrollPhysics(),
+                      padding: const EdgeInsets.fromLTRB(12, 8, 12, 16),
+                      separatorBuilder: (_, __) => const Divider(color: Colors.white12),
+                      itemCount: visibleCategories.length,
+                      itemBuilder: (context, index) {
+                        final category = visibleCategories[index];
+                        return _buildCategoryTile(category);
                       },
                     );
                   },
@@ -157,6 +161,29 @@ class _MoviesScreenState extends State<MoviesScreen> {
         },
       ),
       ),
+    );
+  }
+
+  Widget _buildCategoryTile(MovieCategory category) {
+    return ListTile(
+      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      minTileHeight: 56,
+      title: Text(
+        category.name,
+        style: TextStyle(color: Colors.white, fontSize: _getFontSize(context, 16)),
+      ),
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => MovieListScreen(
+              xtreamApi: widget.xtreamApi,
+              categoryId: category.id,
+              categoryName: category.name,
+            ),
+          ),
+        );
+      },
     );
   }
 }

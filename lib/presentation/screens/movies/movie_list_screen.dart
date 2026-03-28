@@ -171,10 +171,10 @@ class _MovieListScreenState extends State<MovieListScreen> {
 
   int _getCrossAxisCount(BuildContext context) {
     final width = MediaQuery.of(context).size.width;
-    if (width >= 1200) return 5;
-    if (width >= 900) return 4;
-    if (width >= 600) return 3;
-    return 2;
+    if (width >= 1200) return 6;
+    if (width >= 900) return 5;
+    if (width >= 700) return 4;
+    return 3;
   }
 
   double _getFontSize(BuildContext context, double base) {
@@ -301,6 +301,7 @@ class _MovieListScreenState extends State<MovieListScreen> {
     _hasMore = end < filteredMovies.length;
 
     return CustomScrollView(
+      physics: const BouncingScrollPhysics(),
       slivers: [
         SliverPadding(
           padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
@@ -426,8 +427,9 @@ class _MovieCardState extends State<_MovieCard> {
                                 ),
                                 child: Image.network(
                                   widget.movie.posterUrl,
-                                  cacheWidth: 300,
+                                  cacheWidth: 400,
                                   cacheHeight: 450,
+                                  filterQuality: FilterQuality.low,
                                   fit: BoxFit.cover,
                                   errorBuilder: (_, __, ___) => Container(
                                     color: Colors.white10,
