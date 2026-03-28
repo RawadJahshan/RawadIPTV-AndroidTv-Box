@@ -32,10 +32,36 @@ class MoviePlayerScreen extends StatefulWidget {
 }
 
 class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
+  late ThaNativePlayerController _ctrl;
+  Timer? _progressTimer;
+
   Duration _position = Duration.zero;
   Duration _duration = Duration.zero;
   DateTime? _lastProgressSaveAt;
-  bool _isSavingFinalProgress = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = ThaNativePlayerController.single(
+      ThaMediaSource(
+        widget.streamUrl,
+        headers: const {
+          'User-Agent': 'Mozilla/5.0 (Linux; Android 10)',
+          'Connection': 'keep-alive',
+        },
+      ),
+      autoPlay: true,
+    );
+
+    if (widget.startAt != null && widget.startAt! > Duration.zero) {
+      Future.delayed(const Duration(seconds: 2), () {
+        _ctrl.seekTo(widget.startAt!);
+      });
+    }
+
+    _progressTimer =
+        Timer.periodic(const Duration(seconds: 5), (_) => _saveProgress());
+  }
 
   Future<void> _saveProgress({bool force = false}) async {
     if (_duration.inMilliseconds <= 0) return;
@@ -72,34 +98,11 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
     }
   }
 
-  Duration _toDuration(dynamic value) {
-    if (value is Duration) return value;
-    if (value is int) return Duration(milliseconds: value);
-    if (value is double) {
-      return Duration(milliseconds: value.toInt());
-    }
-    return Duration.zero;
-  }
-
-  void _onPositionChanged(dynamic position, dynamic duration) {
-    _position = _toDuration(position);
-    _duration = _toDuration(duration);
-    unawaited(_saveProgress());
-  }
-
-  Future<void> _saveFinalProgress() async {
-    if (_isSavingFinalProgress) return;
-    _isSavingFinalProgress = true;
-    try {
-      await _saveProgress(force: true);
-    } finally {
-      _isSavingFinalProgress = false;
-    }
-  }
-
   @override
   void dispose() {
-    unawaited(_saveFinalProgress());
+    _progressTimer?.cancel();
+    unawaited(_saveProgress(force: true));
+    _ctrl.dispose();
     super.dispose();
   }
 
@@ -109,7 +112,7 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
       canPop: true,
       onPopInvokedWithResult: (didPop, result) {
         if (didPop) {
-          unawaited(_saveFinalProgress());
+          unawaited(_saveProgress(force: true));
         }
       },
       child: Scaffold(
@@ -122,15 +125,23 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
             overflow: TextOverflow.ellipsis,
           ),
         ),
-        body: ThaModernPlayer(
-          src: widget.streamUrl,
-          httpHeaders: const {
-            'User-Agent': 'Mozilla/5.0 (Linux; Android 10)',
-            'Connection': 'keep-alive',
-          },
-          autoPlay: true,
-          startAt: widget.startAt,
-          onPositionChanged: _onPositionChanged,
+        body: Stack(
+          children: [
+            ThaModernPlayer(
+              controller: _ctrl,
+              doubleTapSeek: const Duration(seconds: 10),
+              autoHideAfter: const Duration(seconds: 3),
+              initialBoxFit: BoxFit.contain,
+            ),
+            ValueListenableBuilder<ThaPlaybackState>(
+              valueListenable: _ctrl.playbackState,
+              builder: (_, state, __) {
+                _position = state.position;
+                _duration = state.duration;
+                return const SizedBox.shrink();
+              },
+            ),
+          ],
         ),
       ),
     );
