@@ -49,9 +49,7 @@ class _ChannelsDetailScreenState extends State<ChannelsDetailScreen> {
   Timer? _fallbackTimer;
   Timer? _retryTimer;
 
-  @override
-  void initState() {
-    super.initState();
+  void _forceLandscape() {
     SystemChrome.setPreferredOrientations([
       DeviceOrientation.landscapeLeft,
       DeviceOrientation.landscapeRight,
@@ -59,6 +57,12 @@ class _ChannelsDetailScreenState extends State<ChannelsDetailScreen> {
     SystemChrome.setEnabledSystemUIMode(
       SystemUiMode.immersiveSticky,
     );
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _forceLandscape();
 
     _player = Player(
       configuration: const PlayerConfiguration(
@@ -76,6 +80,12 @@ class _ChannelsDetailScreenState extends State<ChannelsDetailScreen> {
 
     _setupListeners();
     _channelsFuture = _loadChannels();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _forceLandscape();
   }
 
   void _setupListeners() {
@@ -126,7 +136,6 @@ class _ChannelsDetailScreenState extends State<ChannelsDetailScreen> {
     _fallbackTimer?.cancel();
 
     if (!_usingM3u8) {
-      // Try m3u8 first
       debugPrint('Switching to m3u8...');
       _channelsFuture.then((channels) {
         if (mounted && channels.isNotEmpty) {
@@ -134,7 +143,6 @@ class _ChannelsDetailScreenState extends State<ChannelsDetailScreen> {
         }
       });
     } else if (_retryCount < _maxRetries) {
-      // Retry same stream
       _retryCount++;
       debugPrint('Retry $_retryCount/$_maxRetries...');
       _retryTimer = Timer(const Duration(seconds: 2), () {
@@ -147,7 +155,6 @@ class _ChannelsDetailScreenState extends State<ChannelsDetailScreen> {
         }
       });
     } else {
-      // Give up
       setState(() {
         _hasError = true;
         _errorMessage = 'Stream unavailable';
@@ -202,7 +209,6 @@ class _ChannelsDetailScreenState extends State<ChannelsDetailScreen> {
         play: true,
       );
 
-      // If no video after 8 seconds try m3u8
       _fallbackTimer = Timer(const Duration(seconds: 8), () {
         if (mounted && _resolution.isEmpty && !_hasError) {
           debugPrint('No video after 8s, trying m3u8...');
@@ -239,7 +245,6 @@ class _ChannelsDetailScreenState extends State<ChannelsDetailScreen> {
         play: true,
       );
 
-      // If still no video after 8 seconds show error
       _fallbackTimer = Timer(const Duration(seconds: 8), () {
         if (mounted && _resolution.isEmpty) {
           setState(() {
@@ -296,38 +301,9 @@ class _ChannelsDetailScreenState extends State<ChannelsDetailScreen> {
     _playStream(channels[_selectedChannelIndex]);
   }
 
-  Future<void> _enterFullscreen() async {
-    await SystemChrome.setEnabledSystemUIMode(
-      SystemUiMode.immersiveSticky,
-    );
-    await SystemChrome.setPreferredOrientations([
-      DeviceOrientation.landscapeLeft,
-      DeviceOrientation.landscapeRight,
-    ]);
-  }
-
-  Future<void> _exitFullscreen() async {
-    await SystemChrome.setEnabledSystemUIMode(
-      SystemUiMode.manual,
-      overlays: SystemUiOverlay.values,
-    );
-    // Force landscape — never portrait
-    await SystemChrome.setPreferredOrientations([
-      DeviceOrientation.landscapeLeft,
-      DeviceOrientation.landscapeRight,
-    ]);
-  }
-
   @override
   void dispose() {
-    SystemChrome.setPreferredOrientations([
-      DeviceOrientation.landscapeLeft,
-      DeviceOrientation.landscapeRight,
-    ]);
-    SystemChrome.setEnabledSystemUIMode(
-      SystemUiMode.manual,
-      overlays: SystemUiOverlay.values,
-    );
+    _forceLandscape();
     _fallbackTimer?.cancel();
     _retryTimer?.cancel();
     _bufferingSubscription?.cancel();
@@ -344,10 +320,7 @@ class _ChannelsDetailScreenState extends State<ChannelsDetailScreen> {
 
     return WillPopScope(
       onWillPop: () async {
-        await SystemChrome.setPreferredOrientations([
-          DeviceOrientation.landscapeLeft,
-          DeviceOrientation.landscapeRight,
-        ]);
+        _forceLandscape();
         return true;
       },
       child: Scaffold(
@@ -358,432 +331,465 @@ class _ChannelsDetailScreenState extends State<ChannelsDetailScreen> {
           elevation: 0,
         ),
         body: FutureBuilder<List<Channel>>(
-        future: _channelsFuture,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  CircularProgressIndicator(),
-                  SizedBox(height: 16),
-                  Text('Loading channels...'),
-                ],
-              ),
-            );
-          }
-          if (snapshot.hasError) {
-            return Center(child: Text('Error: ${snapshot.error}'));
-          }
-          if (!snapshot.hasData || snapshot.data!.isEmpty) {
-            return const Center(child: Text('No channels found'));
-          }
-
-          final channels = snapshot.data!;
-          final selectedChannel = channels[_selectedChannelIndex];
-
-          return Row(
-            children: [
-              // Left: Channel List 30%
-              Container(
-                width: size.width * 0.3,
-                color: const Color(0xFF0F0F1A),
+          future: _channelsFuture,
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Center(
                 child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 12,
-                      ),
-                      color: const Color(0xFF07070F),
-                      width: double.infinity,
-                      child: Text(
-                        '${channels.length} Channels',
-                        style: const TextStyle(
-                          color: Colors.white70,
-                          fontSize: 13,
-                          fontWeight: FontWeight.bold,
+                    CircularProgressIndicator(),
+                    SizedBox(height: 16),
+                    Text('Loading channels...'),
+                  ],
+                ),
+              );
+            }
+            if (snapshot.hasError) {
+              return Center(child: Text('Error: ${snapshot.error}'));
+            }
+            if (!snapshot.hasData || snapshot.data!.isEmpty) {
+              return const Center(child: Text('No channels found'));
+            }
+
+            final channels = snapshot.data!;
+            final selectedChannel = channels[_selectedChannelIndex];
+
+            return Row(
+              children: [
+                // Left: Channel List 30%
+                Container(
+                  width: size.width * 0.3,
+                  color: const Color(0xFF0F0F1A),
+                  child: Column(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 12,
+                        ),
+                        color: const Color(0xFF07070F),
+                        width: double.infinity,
+                        child: Text(
+                          '${channels.length} Channels',
+                          style: const TextStyle(
+                            color: Colors.white70,
+                            fontSize: 13,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                       ),
-                    ),
-                    Expanded(
-                      child: ListView.builder(
-                        physics: const BouncingScrollPhysics(),
-                        itemCount: channels.length,
-                        itemBuilder: (context, index) {
-                          final channel = channels[index];
-                          final isSelected =
-                              index == _selectedChannelIndex;
-                          return Material(
-                            color: isSelected
-                                ? const Color(0xFF1A3A5C)
-                                : Colors.transparent,
-                            child: InkWell(
-                              onTap: () =>
-                                  _onChannelSelected(channel, index),
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                  vertical: 10,
-                                ),
-                                child: SizedBox(
-                                  height: 56,
-                                  child: Row(
-                                    children: [
-                                    Container(
-                                      width: 40,
-                                      height: 40,
-                                      decoration: BoxDecoration(
-                                        color: const Color(0xFF1E1E2E),
-                                        borderRadius:
-                                            BorderRadius.circular(6),
-                                      ),
-                                      child: channel.logoUrl.isNotEmpty
-                                          ? ClipRRect(
-                                              borderRadius:
-                                                  BorderRadius.circular(
-                                                      6),
-                                              child: Image.network(
-                                                channel.logoUrl,
-                                                cacheWidth: 400,
-                                                cacheHeight: 450,
-                                                filterQuality: FilterQuality.low,
-                                                fit: BoxFit.contain,
-                                                errorBuilder:
-                                                    (_, __, ___) =>
-                                                        const Icon(
+                      Expanded(
+                        child: ListView.builder(
+                          physics: const BouncingScrollPhysics(),
+                          itemCount: channels.length,
+                          itemBuilder: (context, index) {
+                            final channel = channels[index];
+                            final isSelected =
+                                index == _selectedChannelIndex;
+                            return Material(
+                              color: isSelected
+                                  ? const Color(0xFF1A3A5C)
+                                  : Colors.transparent,
+                              child: InkWell(
+                                onTap: () =>
+                                    _onChannelSelected(channel, index),
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 10,
+                                  ),
+                                  child: SizedBox(
+                                    height: 56,
+                                    child: Row(
+                                      children: [
+                                        Container(
+                                          width: 40,
+                                          height: 40,
+                                          decoration: BoxDecoration(
+                                            color:
+                                                const Color(0xFF1E1E2E),
+                                            borderRadius:
+                                                BorderRadius.circular(6),
+                                          ),
+                                          child: channel
+                                                  .logoUrl.isNotEmpty
+                                              ? ClipRRect(
+                                                  borderRadius:
+                                                      BorderRadius.circular(
+                                                          6),
+                                                  child: Image.network(
+                                                    channel.logoUrl,
+                                                    cacheWidth: 400,
+                                                    cacheHeight: 450,
+                                                    filterQuality:
+                                                        FilterQuality.low,
+                                                    fit: BoxFit.contain,
+                                                    errorBuilder:
+                                                        (_, __, ___) =>
+                                                            const Icon(
+                                                      Icons.tv,
+                                                      color: Colors.white54,
+                                                      size: 20,
+                                                    ),
+                                                  ),
+                                                )
+                                              : const Icon(
                                                   Icons.tv,
                                                   color: Colors.white54,
                                                   size: 20,
                                                 ),
-                                              ),
-                                            )
-                                          : const Icon(
-                                              Icons.tv,
-                                              color: Colors.white54,
-                                              size: 20,
-                                            ),
-                                    ),
-                                    const SizedBox(width: 10),
-                                    Expanded(
-                                      child: Text(
-                                        channel.name,
-                                        style: TextStyle(
-                                          color: isSelected
-                                              ? Colors.white
-                                              : Colors.white70,
-                                          fontSize: 13,
-                                          fontWeight: isSelected
-                                              ? FontWeight.bold
-                                              : FontWeight.normal,
                                         ),
-                                        maxLines: 2,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
+                                        const SizedBox(width: 10),
+                                        Expanded(
+                                          child: Text(
+                                            channel.name,
+                                            style: TextStyle(
+                                              color: isSelected
+                                                  ? Colors.white
+                                                  : Colors.white70,
+                                              fontSize: 13,
+                                              fontWeight: isSelected
+                                                  ? FontWeight.bold
+                                                  : FontWeight.normal,
+                                            ),
+                                            maxLines: 2,
+                                            overflow:
+                                                TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                        if (isSelected)
+                                          const Icon(
+                                            Icons.play_arrow,
+                                            color: Colors.blue,
+                                            size: 16,
+                                          ),
+                                      ],
                                     ),
-                                    if (isSelected)
+                                  ),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                // Right: Video + Info 70%
+                Expanded(
+                  child: Column(
+                    children: [
+                      // Video Player
+                      Container(
+                        height: (size.height - kToolbarHeight) * 0.62,
+                        color: Colors.black,
+                        child: Stack(
+                          children: [
+                            SizedBox.expand(
+                              child: RepaintBoundary(
+                                child: Video(
+                                  controller: _controller,
+                                  fit: BoxFit.contain,
+                                  // KEY FIX: use custom fullscreen
+                                  // that always keeps landscape
+                                  onEnterFullscreen: () async {
+                                    await SystemChrome
+                                        .setEnabledSystemUIMode(
+                                      SystemUiMode.immersiveSticky,
+                                    );
+                                    await SystemChrome
+                                        .setPreferredOrientations([
+                                      DeviceOrientation.landscapeLeft,
+                                      DeviceOrientation.landscapeRight,
+                                    ]);
+                                  },
+                                  onExitFullscreen: () async {
+                                    await SystemChrome
+                                        .setEnabledSystemUIMode(
+                                      SystemUiMode.manual,
+                                      overlays: SystemUiOverlay.values,
+                                    );
+                                    // Always landscape — never portrait
+                                    await SystemChrome
+                                        .setPreferredOrientations([
+                                      DeviceOrientation.landscapeLeft,
+                                      DeviceOrientation.landscapeRight,
+                                    ]);
+                                  },
+                                ),
+                              ),
+                            ),
+
+                            // Buffering overlay
+                            if (_isBuffering && !_hasError)
+                              Container(
+                                color: Colors.black87,
+                                child: Center(
+                                  child: Column(
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.center,
+                                    children: [
+                                      const CircularProgressIndicator(
+                                        color: Colors.white,
+                                        strokeWidth: 2,
+                                      ),
+                                      const SizedBox(height: 12),
+                                      Text(
+                                        'Loading ${selectedChannel.name}...',
+                                        style: const TextStyle(
+                                          color: Colors.white70,
+                                          fontSize: 13,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 8),
+                                      if (_usingM3u8)
+                                        const Text(
+                                          'Trying HLS stream...',
+                                          style: TextStyle(
+                                            color: Colors.white38,
+                                            fontSize: 11,
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+
+                            // Error overlay
+                            if (_hasError)
+                              Container(
+                                color: Colors.black87,
+                                child: Center(
+                                  child: Column(
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.center,
+                                    children: [
                                       const Icon(
-                                        Icons.play_arrow,
-                                        color: Colors.blue,
-                                        size: 16,
+                                        Icons.error_outline,
+                                        color: Colors.red,
+                                        size: 48,
+                                      ),
+                                      const SizedBox(height: 12),
+                                      Text(
+                                        _errorMessage,
+                                        style: const TextStyle(
+                                          color: Colors.white70,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 16),
+                                      ElevatedButton.icon(
+                                        onPressed: () =>
+                                            _retryStream(channels),
+                                        icon:
+                                            const Icon(Icons.refresh),
+                                        label: const Text('Retry'),
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: Colors.blue,
+                                        ),
                                       ),
                                     ],
                                   ),
                                 ),
                               ),
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-                  ],
-                ),
-              ),
 
-              // Right: Video + Info 70%
-              Expanded(
-                child: Column(
-                  children: [
-                    // Video Player
-                    Container(
-                      height:
-                          (size.height - kToolbarHeight) * 0.62,
-                      color: Colors.black,
-                      child: Stack(
-                        children: [
-                          SizedBox.expand(
-                            child: RepaintBoundary(
-                              child: Video(
-                                controller: _controller,
-                                fit: BoxFit.contain,
-                              ),
-                            ),
-                          ),
-
-                          // Buffering overlay
-                          if (_isBuffering && !_hasError)
-                            Container(
-                              color: Colors.black87,
-                              child: Center(
-                                child: Column(
-                                  mainAxisAlignment:
-                                      MainAxisAlignment.center,
-                                  children: [
-                                    const CircularProgressIndicator(
-                                      color: Colors.white,
-                                      strokeWidth: 2,
-                                    ),
-                                    const SizedBox(height: 12),
-                                    Text(
-                                      'Loading ${selectedChannel.name}...',
-                                      style: const TextStyle(
-                                        color: Colors.white70,
-                                        fontSize: 13,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 8),
-                                    if (_usingM3u8)
-                                      const Text(
-                                        'Trying HLS stream...',
-                                        style: TextStyle(
-                                          color: Colors.white38,
-                                          fontSize: 11,
-                                        ),
-                                      ),
-                                  ],
-                                ),
-                              ),
-                            ),
-
-                          // Error overlay
-                          if (_hasError)
-                            Container(
-                              color: Colors.black87,
-                              child: Center(
-                                child: Column(
-                                  mainAxisAlignment:
-                                      MainAxisAlignment.center,
-                                  children: [
-                                    const Icon(
-                                      Icons.error_outline,
-                                      color: Colors.red,
-                                      size: 48,
-                                    ),
-                                    const SizedBox(height: 12),
-                                    Text(
-                                      _errorMessage,
-                                      style: const TextStyle(
-                                        color: Colors.white70,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 16),
-                                    ElevatedButton.icon(
-                                      onPressed: () =>
-                                          _retryStream(channels),
-                                      icon: const Icon(Icons.refresh),
-                                      label: const Text('Retry'),
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: Colors.blue,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-
-                          // Resolution/FPS overlay
-                          if (_resolution.isNotEmpty ||
-                              _fps.isNotEmpty)
-                            Positioned(
-                              top: 8,
-                              right: 8,
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 4,
-                                ),
-                                decoration: BoxDecoration(
-                                  color:
-                                      Colors.black.withValues(alpha: 0.7),
-                                  borderRadius:
-                                      BorderRadius.circular(6),
-                                ),
-                                child: Column(
-                                  crossAxisAlignment:
-                                      CrossAxisAlignment.end,
-                                  children: [
-                                    if (_resolution.isNotEmpty)
-                                      Text(
-                                        _resolution,
-                                        style: const TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
-                                    if (_fps.isNotEmpty)
-                                      Text(
-                                        _fps,
-                                        style: const TextStyle(
-                                          color: Colors.white70,
-                                          fontSize: 11,
-                                        ),
-                                      ),
-                                    if (_usingM3u8)
-                                      const Text(
-                                        'HLS',
-                                        style: TextStyle(
-                                          color: Colors.greenAccent,
-                                          fontSize: 10,
-                                        ),
-                                      ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
-
-                    // Info Panel
-                    Expanded(
-                      child: Container(
-                        color: const Color(0xFF1E1E1E),
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            // Channel name and logo
-                            Row(
-                              children: [
-                                if (selectedChannel.logoUrl.isNotEmpty)
-                                  Container(
-                                    width: 50,
-                                    height: 50,
-                                    margin: const EdgeInsets.only(
-                                        right: 12),
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xFF0F0F1A),
-                                      borderRadius:
-                                          BorderRadius.circular(8),
-                                    ),
-                                    child: ClipRRect(
-                                      borderRadius:
-                                          BorderRadius.circular(8),
-                                      child: Image.network(
-                                        selectedChannel.logoUrl,
-                                        cacheWidth: 400,
-                                        cacheHeight: 450,
-                                        filterQuality: FilterQuality.low,
-                                        fit: BoxFit.contain,
-                                        errorBuilder: (_, __, ___) =>
-                                            const Icon(
-                                          Icons.tv,
-                                          color: Colors.white54,
-                                        ),
-                                      ),
-                                    ),
+                            // Resolution/FPS overlay
+                            if (_resolution.isNotEmpty ||
+                                _fps.isNotEmpty)
+                              Positioned(
+                                top: 8,
+                                right: 8,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 4,
                                   ),
-                                Expanded(
-                                  child: Text(
-                                    selectedChannel.name,
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
+                                  decoration: BoxDecoration(
+                                    color: Colors.black
+                                        .withValues(alpha: 0.7),
+                                    borderRadius:
+                                        BorderRadius.circular(6),
+                                  ),
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.end,
+                                    children: [
+                                      if (_resolution.isNotEmpty)
+                                        Text(
+                                          _resolution,
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      if (_fps.isNotEmpty)
+                                        Text(
+                                          _fps,
+                                          style: const TextStyle(
+                                            color: Colors.white70,
+                                            fontSize: 11,
+                                          ),
+                                        ),
+                                      if (_usingM3u8)
+                                        const Text(
+                                          'HLS',
+                                          style: TextStyle(
+                                            color: Colors.greenAccent,
+                                            fontSize: 10,
+                                          ),
+                                        ),
+                                    ],
                                   ),
                                 ),
-                              ],
-                            ),
-
-                            const SizedBox(height: 12),
-
-                            // Stream info chips
-                            Row(
-                              children: [
-                                if (_resolution.isNotEmpty)
-                                  _infoChip(Icons.hd, _resolution),
-                                if (_resolution.isNotEmpty)
-                                  const SizedBox(width: 8),
-                                if (_fps.isNotEmpty)
-                                  _infoChip(Icons.speed, _fps),
-                                if (_fps.isNotEmpty)
-                                  const SizedBox(width: 8),
-                                if (_usingM3u8)
-                                  _infoChip(Icons.stream, 'HLS'),
-                              ],
-                            ),
-
-                            const SizedBox(height: 16),
-
-                            // EPG placeholder
-                            Container(
-                              padding: const EdgeInsets.all(12),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF0F0F1A),
-                                borderRadius: BorderRadius.circular(8),
                               ),
-                              child: const Row(
+                          ],
+                        ),
+                      ),
+
+                      // Info Panel
+                      Expanded(
+                        child: Container(
+                          color: const Color(0xFF1E1E1E),
+                          padding: const EdgeInsets.all(16),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              // Channel name and logo
+                              Row(
                                 children: [
-                                  Icon(
-                                    Icons.tv_outlined,
-                                    color: Colors.white54,
-                                    size: 16,
-                                  ),
-                                  SizedBox(width: 8),
-                                  Text(
-                                    'EPG: No guide available',
-                                    style: TextStyle(
-                                      color: Colors.white54,
-                                      fontSize: 13,
+                                  if (selectedChannel
+                                      .logoUrl.isNotEmpty)
+                                    Container(
+                                      width: 50,
+                                      height: 50,
+                                      margin: const EdgeInsets.only(
+                                          right: 12),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFF0F0F1A),
+                                        borderRadius:
+                                            BorderRadius.circular(8),
+                                      ),
+                                      child: ClipRRect(
+                                        borderRadius:
+                                            BorderRadius.circular(8),
+                                        child: Image.network(
+                                          selectedChannel.logoUrl,
+                                          cacheWidth: 400,
+                                          cacheHeight: 450,
+                                          filterQuality:
+                                              FilterQuality.low,
+                                          fit: BoxFit.contain,
+                                          errorBuilder:
+                                              (_, __, ___) => const Icon(
+                                            Icons.tv,
+                                            color: Colors.white54,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  Expanded(
+                                    child: Text(
+                                      selectedChannel.name,
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
                                     ),
                                   ),
                                 ],
                               ),
-                            ),
 
-                            const SizedBox(height: 16),
+                              const SizedBox(height: 12),
 
-                            // Favorite button
-                            ElevatedButton.icon(
-                              onPressed: () =>
-                                  _toggleFavorite(selectedChannel),
-                              icon: Icon(
-                                _isFavorite
-                                    ? Icons.favorite
-                                    : Icons.favorite_border,
-                                color: _isFavorite
-                                    ? Colors.red
-                                    : Colors.white,
+                              // Stream info chips
+                              Row(
+                                children: [
+                                  if (_resolution.isNotEmpty)
+                                    _infoChip(Icons.hd, _resolution),
+                                  if (_resolution.isNotEmpty)
+                                    const SizedBox(width: 8),
+                                  if (_fps.isNotEmpty)
+                                    _infoChip(Icons.speed, _fps),
+                                  if (_fps.isNotEmpty)
+                                    const SizedBox(width: 8),
+                                  if (_usingM3u8)
+                                    _infoChip(Icons.stream, 'HLS'),
+                                ],
                               ),
-                              label: Text(
-                                _isFavorite
-                                    ? 'Remove from Favorites'
-                                    : 'Add to Favorites',
-                              ),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor:
-                                    const Color(0xFF1A1A2E),
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 20,
-                                  vertical: 12,
+
+                              const SizedBox(height: 16),
+
+                              // EPG placeholder
+                              Container(
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF0F0F1A),
+                                  borderRadius:
+                                      BorderRadius.circular(8),
+                                ),
+                                child: const Row(
+                                  children: [
+                                    Icon(
+                                      Icons.tv_outlined,
+                                      color: Colors.white54,
+                                      size: 16,
+                                    ),
+                                    SizedBox(width: 8),
+                                    Text(
+                                      'EPG: No guide available',
+                                      style: TextStyle(
+                                        color: Colors.white54,
+                                        fontSize: 13,
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
-                            ),
-                          ],
+
+                              const SizedBox(height: 16),
+
+                              // Favorite button
+                              ElevatedButton.icon(
+                                onPressed: () =>
+                                    _toggleFavorite(selectedChannel),
+                                icon: Icon(
+                                  _isFavorite
+                                      ? Icons.favorite
+                                      : Icons.favorite_border,
+                                  color: _isFavorite
+                                      ? Colors.red
+                                      : Colors.white,
+                                ),
+                                label: Text(
+                                  _isFavorite
+                                      ? 'Remove from Favorites'
+                                      : 'Add to Favorites',
+                                ),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor:
+                                      const Color(0xFF1A1A2E),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 20,
+                                    vertical: 12,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
-            ],
-          );
-        },
-      ),
+              ],
+            );
+          },
+        ),
       ),
     );
   }
