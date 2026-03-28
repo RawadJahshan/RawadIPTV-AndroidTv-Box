@@ -1,7 +1,5 @@
-import 'package:dart_vlc/dart_vlc.dart';
 import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart';
-import 'package:window_manager/window_manager.dart';
 import 'data/datasources/remote/xtream_api.dart';
 import 'presentation/screens/profiles/profiles_screen.dart';
 import 'presentation/screens/favorites/favorites_screen.dart';
@@ -9,8 +7,6 @@ import 'presentation/screens/series/series_categories_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await windowManager.ensureInitialized();
-  DartVLC.initialize();
   MediaKit.ensureInitialized();
   runApp(const MyApp());
 }
