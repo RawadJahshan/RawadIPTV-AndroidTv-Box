@@ -185,9 +185,20 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
     final sliderValue = (_sliderDragValue ?? _position.inMilliseconds.toDouble())
         .clamp(0.0, totalMs);
 
-    return Scaffold(
+    return PopScope(
+      canPop: true,
+      child: Scaffold(
       backgroundColor: Colors.black,
       body: GestureDetector(
+        onDoubleTapDown: (details) {
+          final screenWidth = MediaQuery.of(context).size.width;
+          if (details.localPosition.dx < screenWidth / 2) {
+            _skip(-10);
+          } else {
+            _skip(10);
+          }
+          _showOverlay();
+        },
         onTap: _showOverlay,
         child: Stack(
           children: [
@@ -240,6 +251,7 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
                                 ),
                               ),
                               IconButton(
+                                iconSize: 28,
                                 icon: const Icon(Icons.close, color: Colors.white),
                                 onPressed: () => Navigator.of(context).pop(),
                               ),
@@ -276,11 +288,13 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
                                     ),
                                     const Spacer(),
                                     IconButton(
+                                      iconSize: 28,
                                       icon: const Icon(Icons.replay_10,
                                           color: Colors.white),
                                       onPressed: () => _skip(-10),
                                     ),
                                     IconButton(
+                                      iconSize: 32,
                                       icon: Icon(
                                         _isPlaying
                                             ? Icons.pause
@@ -291,6 +305,7 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
                                       onPressed: () => _player.playOrPause(),
                                     ),
                                     IconButton(
+                                      iconSize: 28,
                                       icon: const Icon(Icons.forward_10,
                                           color: Colors.white),
                                       onPressed: () => _skip(10),
@@ -299,6 +314,7 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
                                       tooltip: 'Aspect Ratio',
                                       icon: const Icon(Icons.aspect_ratio,
                                           color: Colors.white),
+                                      iconSize: 28,
                                       onSelected: (index) {
                                         setState(() => _aspectRatioIndex = index);
                                       },
@@ -325,6 +341,7 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
               ),
           ],
         ),
+      ),
       ),
     );
   }

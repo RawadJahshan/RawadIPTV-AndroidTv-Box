@@ -24,12 +24,15 @@ class MovieListScreen extends StatefulWidget {
 }
 
 class _MovieListScreenState extends State<MovieListScreen> {
+  static const int _pageSize = 50;
   final TextEditingController _searchController = TextEditingController();
 
   bool _isLoading = true;
   String? _errorMessage;
   String _searchQuery = '';
   List<MovieItem> _movies = <MovieItem>[];
+  int _currentPage = 0;
+  bool _hasMore = true;
 
   bool get _isContinueWatching => widget.categoryId == -2;
   bool get _isFavorites => widget.categoryId == -3;
@@ -143,6 +146,8 @@ class _MovieListScreenState extends State<MovieListScreen> {
 
       setState(() {
         _movies = movies;
+        _currentPage = 0;
+        _hasMore = movies.length > _pageSize;
         _isLoading = false;
       });
     } catch (e) {
@@ -164,69 +169,83 @@ class _MovieListScreenState extends State<MovieListScreen> {
     return _movies.where((movie) => movie.title.toLowerCase().contains(lowerQuery)).toList();
   }
 
+  int _getCrossAxisCount(BuildContext context) {
+    final width = MediaQuery.of(context).size.width;
+    if (width >= 1200) return 5;
+    if (width >= 900) return 4;
+    if (width >= 600) return 3;
+    return 2;
+  }
+
+  double _getFontSize(BuildContext context, double base) {
+    final width = MediaQuery.of(context).size.width;
+    if (width >= 900) return base;
+    return base * 0.85;
+  }
+
   @override
   Widget build(BuildContext context) {
-    final width = MediaQuery.of(context).size.width;
-    final crossAxisCount = width >= 1400
-        ? 6
-        : width >= 1200
-            ? 5
-            : width >= 900
-                ? 4
-                : width >= 720
-                    ? 4
-                    : 3;
-
-    return Scaffold(
-      backgroundColor: const Color(0xFF1E1E1E),
-      appBar: AppBar(
-        title: Text(widget.categoryName),
-        backgroundColor: const Color(0xFF0F0F1A),
-        elevation: 0,
-      ),
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child: TextField(
-              controller: _searchController,
-              style: const TextStyle(color: Colors.white),
-              decoration: InputDecoration(
-                hintText: 'Search movies...',
-                hintStyle: const TextStyle(color: Colors.white38),
-                prefixIcon: const Icon(Icons.search, color: Colors.white38),
-                suffixIcon: _searchQuery.isNotEmpty
-                    ? IconButton(
-                        icon: const Icon(Icons.clear, color: Colors.white38),
-                        onPressed: () {
-                          _searchController.clear();
-                          setState(() => _searchQuery = '');
-                        },
-                      )
-                    : null,
-                filled: true,
-                fillColor: const Color(0xFF0F0F1A),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide.none,
+    return PopScope(
+      canPop: true,
+      child: Scaffold(
+        backgroundColor: const Color(0xFF1E1E1E),
+        appBar: AppBar(
+          title: Text(widget.categoryName),
+          backgroundColor: const Color(0xFF0F0F1A),
+          elevation: 0,
+        ),
+        body: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: TextField(
+                controller: _searchController,
+                style: const TextStyle(color: Colors.white),
+                decoration: InputDecoration(
+                  hintText: 'Search movies...',
+                  hintStyle: const TextStyle(color: Colors.white38),
+                  prefixIcon: const Icon(Icons.search, color: Colors.white38),
+                  suffixIcon: _searchQuery.isNotEmpty
+                      ? IconButton(
+                          icon: const Icon(Icons.clear, color: Colors.white38),
+                          onPressed: () {
+                            _searchController.clear();
+                            setState(() {
+                              _searchQuery = '';
+                              _currentPage = 0;
+                              _hasMore = _movies.length > _pageSize;
+                            });
+                          },
+                        )
+                      : null,
+                  filled: true,
+                  fillColor: const Color(0xFF0F0F1A),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide.none,
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: const BorderSide(color: Colors.blue, width: 2),
+                  ),
                 ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: Colors.blue, width: 2),
-                ),
+                onChanged: (value) => setState(() {
+                  _searchQuery = value;
+                  _currentPage = 0;
+                  _hasMore = _filteredMovies.length > _pageSize;
+                }),
               ),
-              onChanged: (value) => setState(() => _searchQuery = value),
             ),
-          ),
-          Expanded(
-            child: _buildBody(crossAxisCount),
-          ),
-        ],
+            Expanded(
+              child: _buildBody(context),
+            ),
+          ],
+        ),
       ),
     );
   }
 
-  Widget _buildBody(int crossAxisCount) {
+  Widget _buildBody(BuildContext context) {
     if (_isLoading) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -238,7 +257,7 @@ class _MovieListScreenState extends State<MovieListScreen> {
           children: [
             Text(
               _errorMessage!,
-              style: const TextStyle(color: Colors.white70),
+            style: TextStyle(color: Colors.white70, fontSize: _getFontSize(context, 14)),
             ),
             const SizedBox(height: 12),
             ElevatedButton(
@@ -254,52 +273,78 @@ class _MovieListScreenState extends State<MovieListScreen> {
 
     if (filteredMovies.isEmpty) {
       if (_isFavorites) {
-        return const Center(
+        return Center(
           child: Text(
             'No favorite movies yet',
-            style: TextStyle(color: Colors.white54, fontSize: 16),
+            style: TextStyle(color: Colors.white54, fontSize: _getFontSize(context, 16)),
           ),
         );
       }
       if (_isContinueWatching) {
-        return const Center(
+        return Center(
           child: Text(
             'No movies in Continue Watching yet',
-            style: TextStyle(color: Colors.white54, fontSize: 16),
+            style: TextStyle(color: Colors.white54, fontSize: _getFontSize(context, 16)),
           ),
         );
       }
-      return const Center(
+      return Center(
         child: Text(
           'No movies found',
-          style: TextStyle(color: Colors.white54, fontSize: 16),
+          style: TextStyle(color: Colors.white54, fontSize: _getFontSize(context, 16)),
         ),
       );
     }
 
-    return GridView.builder(
-      padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: crossAxisCount,
-        crossAxisSpacing: 10,
-        mainAxisSpacing: 10,
-        childAspectRatio: 0.72,
-      ),
-      itemCount: filteredMovies.length,
-      itemBuilder: (context, index) => _MovieCard(
-        movie: filteredMovies[index],
-        onTap: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => MovieDetailScreen(
-                xtreamApi: widget.xtreamApi,
-                movie: filteredMovies[index],
+    final end = ((_currentPage + 1) * _pageSize).clamp(0, filteredMovies.length);
+    final paginatedMovies = filteredMovies.take(end).toList();
+    _hasMore = end < filteredMovies.length;
+
+    return CustomScrollView(
+      slivers: [
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+          sliver: SliverGrid(
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: _getCrossAxisCount(context),
+              crossAxisSpacing: 10,
+              mainAxisSpacing: 10,
+              childAspectRatio: 0.72,
+            ),
+            delegate: SliverChildBuilderDelegate(
+              (context, index) => _MovieCard(
+                movie: paginatedMovies[index],
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => MovieDetailScreen(
+                        xtreamApi: widget.xtreamApi,
+                        movie: paginatedMovies[index],
+                      ),
+                    ),
+                  );
+                },
+              ),
+              childCount: paginatedMovies.length,
+            ),
+          ),
+        ),
+        if (_hasMore && filteredMovies.length > _pageSize)
+          SliverToBoxAdapter(
+            child: Center(
+              child: Padding(
+                padding: const EdgeInsets.only(bottom: 16),
+                child: TextButton(
+                  onPressed: () {
+                    setState(() => _currentPage++);
+                  },
+                  child: const Text('Load More'),
+                ),
               ),
             ),
-          );
-        },
-      ),
+          ),
+      ],
     );
   }
 }
@@ -381,6 +426,8 @@ class _MovieCardState extends State<_MovieCard> {
                                 ),
                                 child: Image.network(
                                   widget.movie.posterUrl,
+                                  cacheWidth: 300,
+                                  cacheHeight: 450,
                                   fit: BoxFit.cover,
                                   errorBuilder: (_, __, ___) => Container(
                                     color: Colors.white10,

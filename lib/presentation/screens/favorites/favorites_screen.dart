@@ -95,6 +95,8 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
                     borderRadius: BorderRadius.circular(8),
                     child: Image.network(
                       channel.logoUrl,
+                      cacheWidth: 300,
+                      cacheHeight: 450,
                       fit: BoxFit.contain,
                       errorBuilder: (_, error, stackTrace) => const Icon(Icons.tv, color: Colors.white54),
                     ),

@@ -39,14 +39,22 @@ class _LiveTvCategoriesScreenState
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFF1E1E1E),
-      appBar: AppBar(
-        title: const Text('Live TV'),
-        backgroundColor: const Color(0xFF0F0F1A),
-        elevation: 0,
-      ),
-      body: FutureBuilder<List<LiveTvCategory>>(
+    double getFontSize(double base) {
+      final width = MediaQuery.of(context).size.width;
+      if (width >= 900) return base;
+      return base * 0.85;
+    }
+
+    return PopScope(
+      canPop: true,
+      child: Scaffold(
+        backgroundColor: const Color(0xFF1E1E1E),
+        appBar: AppBar(
+          title: const Text('Live TV'),
+          backgroundColor: const Color(0xFF0F0F1A),
+          elevation: 0,
+        ),
+        body: FutureBuilder<List<LiveTvCategory>>(
         future: _futureCategories,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
@@ -124,9 +132,9 @@ class _LiveTvCategoriesScreenState
                   children: [
                     Text(
                       '${filtered.length} Categories',
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: Colors.white54,
-                        fontSize: 13,
+                        fontSize: getFontSize(13),
                       ),
                     ),
                   ],
@@ -144,20 +152,22 @@ class _LiveTvCategoriesScreenState
                       )
                     : ListView.separated(
                         padding:
-                            const EdgeInsets.symmetric(horizontal: 12),
+                            const EdgeInsets.fromLTRB(12, 8, 12, 16),
                         separatorBuilder: (_, __) =>
                                                         const Divider(color: Colors.white12),
                         itemCount: filtered.length,
                         itemBuilder: (context, index) {
                           final category = filtered[index];
                           return ListTile(
+                            minTileHeight: 56,
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                             leading: const Icon(
                               Icons.live_tv,
                               color: Color(0xFF00c6ff),
                             ),
                             title: Text(
                               category.name,
-                              style: const TextStyle(color: Colors.white),
+                              style: TextStyle(color: Colors.white, fontSize: getFontSize(16)),
                             ),
                             trailing: const Icon(
                               Icons.arrow_forward_ios,
@@ -182,6 +192,7 @@ class _LiveTvCategoriesScreenState
             ],
           );
         },
+      ),
       ),
     );
   }

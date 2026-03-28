@@ -57,16 +57,24 @@ class _MoviesScreenState extends State<MoviesScreen> {
     ];
   }
 
+  double _getFontSize(BuildContext context, double base) {
+    final width = MediaQuery.of(context).size.width;
+    if (width >= 900) return base;
+    return base * 0.85;
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFF1E1E1E),
-      appBar: AppBar(
-        title: const Text('Movies'),
-        backgroundColor: const Color(0xFF0F0F1A),
-        elevation: 0,
-      ),
-      body: FutureBuilder<List<MovieCategory>>(
+    return PopScope(
+      canPop: true,
+      child: Scaffold(
+        backgroundColor: const Color(0xFF1E1E1E),
+        appBar: AppBar(
+          title: const Text('Movies'),
+          backgroundColor: const Color(0xFF0F0F1A),
+          elevation: 0,
+        ),
+        body: FutureBuilder<List<MovieCategory>>(
         future: _futureCategories,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
@@ -116,15 +124,17 @@ class _MoviesScreenState extends State<MoviesScreen> {
               ),
               Expanded(
                 child: ListView.separated(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  padding: const EdgeInsets.fromLTRB(12, 8, 12, 16),
                   separatorBuilder: (_, __) => const Divider(color: Colors.white12),
                   itemCount: visibleCategories.length,
                   itemBuilder: (context, index) {
                     final category = visibleCategories[index];
                     return ListTile(
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      minTileHeight: 56,
                       title: Text(
                         category.name,
-                        style: const TextStyle(color: Colors.white),
+                        style: TextStyle(color: Colors.white, fontSize: _getFontSize(context, 16)),
                       ),
                       onTap: () {
                         Navigator.push(
@@ -145,6 +155,7 @@ class _MoviesScreenState extends State<MoviesScreen> {
             ],
           );
         },
+      ),
       ),
     );
   }

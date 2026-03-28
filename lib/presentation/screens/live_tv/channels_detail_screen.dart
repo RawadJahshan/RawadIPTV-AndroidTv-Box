@@ -306,14 +306,16 @@ class _ChannelsDetailScreenState extends State<ChannelsDetailScreen> {
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
 
-    return Scaffold(
-      backgroundColor: const Color(0xFF1E1E1E),
-      appBar: AppBar(
-        title: Text(widget.category.name),
-        backgroundColor: const Color(0xFF0F0F1A),
-        elevation: 0,
-      ),
-      body: FutureBuilder<List<Channel>>(
+    return PopScope(
+      canPop: true,
+      child: Scaffold(
+        backgroundColor: const Color(0xFF1E1E1E),
+        appBar: AppBar(
+          title: Text(widget.category.name),
+          backgroundColor: const Color(0xFF0F0F1A),
+          elevation: 0,
+        ),
+        body: FutureBuilder<List<Channel>>(
         future: _channelsFuture,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
@@ -379,10 +381,12 @@ class _ChannelsDetailScreenState extends State<ChannelsDetailScreen> {
                               child: Padding(
                                 padding: const EdgeInsets.symmetric(
                                   horizontal: 12,
-                                  vertical: 8,
+                                  vertical: 10,
                                 ),
-                                child: Row(
-                                  children: [
+                                child: SizedBox(
+                                  height: 56,
+                                  child: Row(
+                                    children: [
                                     Container(
                                       width: 40,
                                       height: 40,
@@ -398,6 +402,8 @@ class _ChannelsDetailScreenState extends State<ChannelsDetailScreen> {
                                                       6),
                                               child: Image.network(
                                                 channel.logoUrl,
+                                                cacheWidth: 300,
+                                                cacheHeight: 450,
                                                 fit: BoxFit.contain,
                                                 errorBuilder:
                                                     (_, __, ___) =>
@@ -437,7 +443,8 @@ class _ChannelsDetailScreenState extends State<ChannelsDetailScreen> {
                                         color: Colors.blue,
                                         size: 16,
                                       ),
-                                  ],
+                                    ],
+                                  ),
                                 ),
                               ),
                             ),
@@ -619,6 +626,8 @@ class _ChannelsDetailScreenState extends State<ChannelsDetailScreen> {
                                           BorderRadius.circular(8),
                                       child: Image.network(
                                         selectedChannel.logoUrl,
+                                        cacheWidth: 300,
+                                        cacheHeight: 450,
                                         fit: BoxFit.contain,
                                         errorBuilder: (_, __, ___) =>
                                             const Icon(
@@ -727,6 +736,7 @@ class _ChannelsDetailScreenState extends State<ChannelsDetailScreen> {
             ],
           );
         },
+      ),
       ),
     );
   }
