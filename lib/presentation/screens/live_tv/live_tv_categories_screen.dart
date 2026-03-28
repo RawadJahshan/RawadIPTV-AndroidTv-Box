@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../../../data/datasources/remote/xtream_api.dart';
 import '../../../data/models/live_tv_category.dart';
 import 'channels_detail_screen.dart';
@@ -21,6 +22,10 @@ class _LiveTvCategoriesScreenState
   @override
   void initState() {
     super.initState();
+    SystemChrome.setPreferredOrientations([
+      DeviceOrientation.landscapeLeft,
+      DeviceOrientation.landscapeRight,
+    ]);
     _futureCategories = _fetchCategories();
   }
 
@@ -33,6 +38,10 @@ class _LiveTvCategoriesScreenState
 
   @override
   void dispose() {
+    SystemChrome.setPreferredOrientations([
+      DeviceOrientation.landscapeLeft,
+      DeviceOrientation.landscapeRight,
+    ]);
     _searchController.dispose();
     super.dispose();
   }
