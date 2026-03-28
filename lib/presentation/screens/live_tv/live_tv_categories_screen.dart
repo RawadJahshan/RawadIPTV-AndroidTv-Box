@@ -50,7 +50,8 @@ class _LiveTvCategoriesScreenState
       child: Scaffold(
         backgroundColor: const Color(0xFF1E1E1E),
         appBar: AppBar(
-          title: const Text('Live TV'),
+          toolbarHeight: 46,
+          title: const Text('Live TV', style: TextStyle(fontSize: 15)),
           backgroundColor: const Color(0xFF0F0F1A),
           elevation: 0,
         ),
@@ -80,16 +81,30 @@ class _LiveTvCategoriesScreenState
             children: [
               // Search bar
               Padding(
-                padding: const EdgeInsets.all(12),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 8,
+                  vertical: 6,
+                ),
                 child: TextField(
                   controller: _searchController,
-                  style: const TextStyle(color: Colors.white),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 13,
+                  ),
                   decoration: InputDecoration(
                     hintText: 'Search categories...',
-                    hintStyle: const TextStyle(color: Colors.white38),
+                    hintStyle: const TextStyle(
+                      color: Colors.white38,
+                      fontSize: 13,
+                    ),
                     prefixIcon: const Icon(
                       Icons.search,
                       color: Colors.white38,
+                      size: 18,
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
                     ),
                     suffixIcon: _searchQuery.isNotEmpty
                         ? IconButton(
@@ -106,11 +121,11 @@ class _LiveTvCategoriesScreenState
                     filled: true,
                     fillColor: const Color(0xFF0F0F1A),
                     border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(10),
                       borderSide: BorderSide.none,
                     ),
                     focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(10),
                       borderSide: const BorderSide(
                         color: Colors.blue,
                         width: 2,
