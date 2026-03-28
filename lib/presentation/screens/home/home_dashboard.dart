@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import '../live_tv/live_tv_categories_screen.dart';
 import '../movies/movies_screen.dart';
@@ -8,7 +9,7 @@ import '../../../data/datasources/remote/xtream_api.dart';
 import '../profiles/profiles_screen.dart';
 import '../settings/settings_screen.dart';
 
-class HomeDashboard extends StatelessWidget {
+class HomeDashboard extends StatefulWidget {
   final String username;
   final String expiryDate;
   final XtreamApi xtreamApi;
@@ -19,6 +20,20 @@ class HomeDashboard extends StatelessWidget {
     required this.expiryDate,
     required this.xtreamApi,
   });
+
+  @override
+  State<HomeDashboard> createState() => _HomeDashboardState();
+}
+
+class _HomeDashboardState extends State<HomeDashboard> {
+  @override
+  void initState() {
+    super.initState();
+    SystemChrome.setPreferredOrientations([
+      DeviceOrientation.landscapeLeft,
+      DeviceOrientation.landscapeRight,
+    ]);
+  }
 
   Widget _buildMenuCard(
     BuildContext context, {
@@ -94,7 +109,7 @@ class HomeDashboard extends StatelessWidget {
                   ),
                   const Spacer(),
                   Text(
-                    username,
+                    widget.username,
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 30,
@@ -132,7 +147,9 @@ class HomeDashboard extends StatelessWidget {
                         Navigator.push(
                           context,
                           MaterialPageRoute(
-                            builder: (_) => LiveTvCategoriesScreen(xtreamApi: xtreamApi),
+                            builder: (_) => LiveTvCategoriesScreen(
+                              xtreamApi: widget.xtreamApi,
+                            ),
                           ),
                         );
                       },
@@ -145,7 +162,9 @@ class HomeDashboard extends StatelessWidget {
                         Navigator.push(
                           context,
                           MaterialPageRoute(
-                            builder: (_) => MoviesScreen(xtreamApi: xtreamApi),
+                            builder: (_) => MoviesScreen(
+                              xtreamApi: widget.xtreamApi,
+                            ),
                           ),
                         );
                       },
@@ -158,7 +177,9 @@ class HomeDashboard extends StatelessWidget {
                         Navigator.push(
                           context,
                           MaterialPageRoute(
-                            builder: (_) => SeriesCategoriesScreen(xtreamApi: xtreamApi),
+                            builder: (_) => SeriesCategoriesScreen(
+                              xtreamApi: widget.xtreamApi,
+                            ),
                           ),
                         );
                       },
@@ -167,7 +188,11 @@ class HomeDashboard extends StatelessWidget {
                       context,
                       label: 'FAVORITES',
                       icon: Icons.favorite,
-                      onTap: () => Navigator.pushNamed(context, '/favorites', arguments: xtreamApi),
+                      onTap: () => Navigator.pushNamed(
+                        context,
+                        '/favorites',
+                        arguments: widget.xtreamApi,
+                      ),
                     ),
                     _buildMenuCard(
                       context,
@@ -189,7 +214,7 @@ class HomeDashboard extends StatelessWidget {
               Align(
                 alignment: Alignment.bottomRight,
                 child: Text(
-                  'Expiration: $expiryDate',
+                  'Expiration: ${widget.expiryDate}',
                   textAlign: TextAlign.right,
                   style: const TextStyle(
                     color: Colors.white70,

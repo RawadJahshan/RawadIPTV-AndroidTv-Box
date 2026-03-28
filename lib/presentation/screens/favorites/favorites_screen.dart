@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../../../data/datasources/remote/xtream_api.dart';
 import '../../../data/models/channel.dart';
 import '../../../utils/favorites_manager.dart';
@@ -21,6 +22,10 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
   @override
   void initState() {
     super.initState();
+    SystemChrome.setPreferredOrientations([
+      DeviceOrientation.landscapeLeft,
+      DeviceOrientation.landscapeRight,
+    ]);
     _loadFavorites();
   }
 
