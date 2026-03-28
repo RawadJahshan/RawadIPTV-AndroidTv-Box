@@ -190,21 +190,42 @@ class _MovieListScreenState extends State<MovieListScreen> {
       child: Scaffold(
         backgroundColor: const Color(0xFF1E1E1E),
         appBar: AppBar(
-          title: Text(widget.categoryName),
+          toolbarHeight: 46,
+          title: Text(
+            widget.categoryName,
+            style: const TextStyle(fontSize: 15),
+          ),
           backgroundColor: const Color(0xFF0F0F1A),
           elevation: 0,
         ),
         body: Column(
           children: [
             Padding(
-              padding: const EdgeInsets.all(12),
+              padding: const EdgeInsets.symmetric(
+                horizontal: 8,
+                vertical: 6,
+              ),
               child: TextField(
                 controller: _searchController,
-                style: const TextStyle(color: Colors.white),
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 13,
+                ),
                 decoration: InputDecoration(
                   hintText: 'Search movies...',
-                  hintStyle: const TextStyle(color: Colors.white38),
-                  prefixIcon: const Icon(Icons.search, color: Colors.white38),
+                  hintStyle: const TextStyle(
+                    color: Colors.white38,
+                    fontSize: 13,
+                  ),
+                  prefixIcon: const Icon(
+                    Icons.search,
+                    color: Colors.white38,
+                    size: 18,
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
                   suffixIcon: _searchQuery.isNotEmpty
                       ? IconButton(
                           icon: const Icon(Icons.clear, color: Colors.white38),
@@ -221,11 +242,11 @@ class _MovieListScreenState extends State<MovieListScreen> {
                   filled: true,
                   fillColor: const Color(0xFF0F0F1A),
                   border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(10),
                     borderSide: BorderSide.none,
                   ),
                   focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(10),
                     borderSide: const BorderSide(color: Colors.blue, width: 2),
                   ),
                 ),
