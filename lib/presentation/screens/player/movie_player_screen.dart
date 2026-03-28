@@ -117,14 +117,6 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
       },
       child: Scaffold(
         backgroundColor: Colors.black,
-        appBar: AppBar(
-          backgroundColor: Colors.black,
-          foregroundColor: Colors.white,
-          title: Text(
-            widget.title,
-            overflow: TextOverflow.ellipsis,
-          ),
-        ),
         body: Stack(
           children: [
             ThaModernPlayer(
@@ -132,6 +124,39 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
               doubleTapSeek: const Duration(seconds: 10),
               autoHideAfter: const Duration(seconds: 3),
               initialBoxFit: BoxFit.contain,
+            ),
+            Positioned(
+              top: 8,
+              left: 8,
+              right: 60,
+              child: Text(
+                widget.title,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                  shadows: [
+                    Shadow(
+                      color: Colors.black,
+                      blurRadius: 4,
+                    ),
+                  ],
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            Positioned(
+              top: 8,
+              right: 8,
+              child: IconButton(
+                icon: const Icon(
+                  Icons.close,
+                  color: Colors.white,
+                  size: 28,
+                ),
+                onPressed: () => Navigator.of(context).pop(),
+              ),
             ),
             ValueListenableBuilder<ThaPlaybackState>(
               valueListenable: _ctrl.playbackState,
