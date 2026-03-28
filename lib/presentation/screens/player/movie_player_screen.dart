@@ -61,7 +61,8 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
       autoPlay: true,
     );
     _ctrl.playbackState.addListener(_syncPlaybackState);
-    _attachErrorListener();
+    // Listen for errors using correct API
+    _ctrl.errorDetails.addListener(_onPlayerError);
 
     if (widget.startAt != null && widget.startAt! > Duration.zero) {
       Future.delayed(const Duration(seconds: 2), () {
@@ -73,24 +74,23 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
         Timer.periodic(const Duration(seconds: 5), (_) => _saveProgress());
   }
 
-  void _attachErrorListener() {
-    _ctrl.onErrorDetails = (error) {
-      if (!mounted) return;
-      final errorStr = error?.toString() ?? '';
-      final is4KError = errorStr.contains('EXCEEDS_CAPABILITIES') ||
-          errorStr.contains('NO_EXCEEDS_CAPABILITIES') ||
-          errorStr.contains('format_supported=NO_EXCEEDS_CAPABILITIES') ||
-          errorStr.contains('3840') ||
-          errorStr.contains('hevc');
+  void _onPlayerError() {
+    final error = _ctrl.errorDetails.value;
+    if (error == null || !mounted) return;
 
-      if (is4KError && !_triedFallback && !_isFallbackDialogOpen) {
-        _show4KFallbackDialog();
-      } else {
-        setState(() {
-          _errorMessage = 'Playback error. Please try another stream.';
-        });
-      }
-    };
+    final errorStr = error.toString();
+    final is4KError = errorStr.contains('EXCEEDS_CAPABILITIES') ||
+        errorStr.contains('NO_EXCEEDS') ||
+        errorStr.contains('3840') ||
+        errorStr.contains('hevc');
+
+    if (is4KError && !_triedFallback && !_isFallbackDialogOpen) {
+      _show4KFallbackDialog();
+    } else {
+      setState(() {
+        _errorMessage = 'Playback error. Please try another stream.';
+      });
+    }
   }
 
   void _show4KFallbackDialog() {
@@ -146,6 +146,7 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
 
     try {
       _ctrl.playbackState.removeListener(_syncPlaybackState);
+      _ctrl.errorDetails.removeListener(_onPlayerError);
     } catch (_) {}
 
     try {
@@ -171,7 +172,8 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
       autoPlay: true,
     );
     _ctrl.playbackState.addListener(_syncPlaybackState);
-    _attachErrorListener();
+    // Listen for errors using correct API
+    _ctrl.errorDetails.addListener(_onPlayerError);
 
     if (mounted) {
       setState(() {});
@@ -243,6 +245,7 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
     _progressTimer?.cancel();
     unawaited(_saveProgress(force: true));
     _ctrl.playbackState.removeListener(_syncPlaybackState);
+    _ctrl.errorDetails.removeListener(_onPlayerError);
     _ctrl.dispose();
     super.dispose();
   }
