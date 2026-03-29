@@ -33,10 +33,16 @@ class MoviePlayerScreen extends StatefulWidget {
 }
 
 class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
+  static const Duration _remoteSeekStep = Duration(seconds: 10);
+  static const Duration _controlsHintDuration = Duration(seconds: 3);
+
   late ThaNativePlayerController _ctrl;
+  final FocusNode _playerFocusNode = FocusNode(debugLabel: 'movie_player_focus');
   Timer? _progressTimer;
+  Timer? _controlsHintTimer;
   String? _errorMessage;
   bool _show4KDialog = false;
+  bool _controlsLikelyVisible = false;
 
   Duration _position = Duration.zero;
   Duration _duration = Duration.zero;
@@ -73,6 +79,81 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
         Timer.periodic(const Duration(seconds: 5), (_) => _saveProgress());
   }
 
+
+  void _markControlsVisibleHint() {
+    _controlsHintTimer?.cancel();
+    _controlsLikelyVisible = true;
+    _controlsHintTimer = Timer(_controlsHintDuration, () {
+      _controlsLikelyVisible = false;
+    });
+  }
+
+  void _togglePlayPauseFromRemote() {
+    final isPlaying = _ctrl.playbackState.value.isPlaying;
+    if (isPlaying) {
+      _ctrl.pause();
+    } else {
+      _ctrl.play();
+    }
+    _markControlsVisibleHint();
+  }
+
+  void _seekFromRemote(bool forward) {
+    final state = _ctrl.playbackState.value;
+    final max = state.duration;
+    final current = state.position;
+    final target = forward ? current + _remoteSeekStep : current - _remoteSeekStep;
+
+    final clamped = max > Duration.zero
+        ? Duration(milliseconds: target.inMilliseconds.clamp(0, max.inMilliseconds))
+        : Duration(milliseconds: target.inMilliseconds.clamp(0, 1 << 31));
+
+    _ctrl.seekTo(clamped);
+  }
+
+  bool _isSelectKey(LogicalKeyboardKey key) =>
+      key == LogicalKeyboardKey.select ||
+      key == LogicalKeyboardKey.enter ||
+      key == LogicalKeyboardKey.numpadEnter ||
+      key == LogicalKeyboardKey.gameButtonA;
+
+  KeyEventResult _handlePlayerKey(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent) return KeyEventResult.handled;
+
+    final key = event.logicalKey;
+
+    if (key == LogicalKeyboardKey.goBack ||
+        key == LogicalKeyboardKey.escape ||
+        key == LogicalKeyboardKey.browserBack) {
+      return KeyEventResult.ignored;
+    }
+
+    if (_show4KDialog || _errorMessage != null) {
+      return KeyEventResult.ignored;
+    }
+
+    if (_isSelectKey(key)) {
+      _togglePlayPauseFromRemote();
+      return KeyEventResult.handled;
+    }
+
+    if (key == LogicalKeyboardKey.arrowUp || key == LogicalKeyboardKey.arrowDown) {
+      _markControlsVisibleHint();
+      return KeyEventResult.ignored;
+    }
+
+    if (key == LogicalKeyboardKey.arrowLeft || key == LogicalKeyboardKey.arrowRight) {
+      if (_controlsLikelyVisible) {
+        _markControlsVisibleHint();
+        return KeyEventResult.ignored;
+      }
+
+      _seekFromRemote(key == LogicalKeyboardKey.arrowRight);
+      return KeyEventResult.handled;
+    }
+
+    return KeyEventResult.ignored;
+  }
   void _onError(String? error) {
     if (!mounted) return;
     final errorStr = error ?? '';
@@ -121,6 +202,9 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
     ]);
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
     _initPlayer();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _playerFocusNode.requestFocus();
+    });
   }
 
   Future<void> _saveProgress({bool force = false}) async {
@@ -162,6 +246,8 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
   void dispose() {
     _restoreLandscapeAndSystemUi();
     _progressTimer?.cancel();
+    _controlsHintTimer?.cancel();
+    _playerFocusNode.dispose();
     unawaited(_saveProgress(force: true));
     try {
       _ctrl.playbackState.removeListener(_syncPlaybackState);
@@ -186,7 +272,11 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
           child: Stack(
             children: [
               Positioned.fill(
-                child: ThaModernPlayer(
+                child: Focus(
+                  focusNode: _playerFocusNode,
+                  autofocus: true,
+                  onKeyEvent: _handlePlayerKey,
+                  child: ThaModernPlayer(
                   controller: _ctrl,
                   doubleTapSeek: const Duration(seconds: 10),
                   autoHideAfter: const Duration(seconds: 3),
