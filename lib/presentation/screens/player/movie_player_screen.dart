@@ -92,25 +92,11 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
     });
   }
 
-  void _focusIntoPlayerOverlay() {
-    if (!mounted) return;
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-
-      final scope = FocusScope.of(context);
-      if (_playerFocusNode.hasPrimaryFocus || _playerFocusNode.hasFocus) {
-        scope.nextFocus();
-      }
-    });
-  }
-
-  void _openControlsFromRemote({bool focusOverlay = true}) {
+  void _openControlsFromRemote() {
     _markControlsVisibleHint();
     _simulateSurfaceTap();
-
-    if (focusOverlay) {
-      _focusIntoPlayerOverlay();
+    if (mounted) {
+      _playerFocusNode.requestFocus();
     }
   }
 
@@ -189,34 +175,25 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
     if (_isSelectKey(key)) {
       if (_controlsLikelyVisible) {
         _markControlsVisibleHint();
-        _focusIntoPlayerOverlay();
-        return KeyEventResult.ignored;
+        _simulateSurfaceTap();
+        return KeyEventResult.handled;
       }
 
-      _openControlsFromRemote(focusOverlay: true);
+      _openControlsFromRemote();
       return KeyEventResult.handled;
     }
 
     if (key == LogicalKeyboardKey.arrowUp || key == LogicalKeyboardKey.arrowDown) {
       if (!_controlsLikelyVisible) {
-        _openControlsFromRemote(focusOverlay: true);
-        return KeyEventResult.handled;
-      } else {
-        _markControlsVisibleHint();
-        _focusIntoPlayerOverlay();
+        _openControlsFromRemote();
       }
-      return KeyEventResult.ignored;
+      _markControlsVisibleHint();
+      return KeyEventResult.handled;
     }
 
     if (key == LogicalKeyboardKey.arrowLeft || key == LogicalKeyboardKey.arrowRight) {
-      if (_controlsLikelyVisible) {
-        _markControlsVisibleHint();
-        _focusIntoPlayerOverlay();
-        return KeyEventResult.ignored;
-      }
-
       _seekFromRemote(key == LogicalKeyboardKey.arrowRight);
-      _openControlsFromRemote(focusOverlay: true);
+      _openControlsFromRemote();
       return KeyEventResult.handled;
     }
 
@@ -387,13 +364,17 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
                             top: 0,
                             right: 0,
                             child: SafeArea(
-                              child: IconButton(
-                                icon: const Icon(
-                                  Icons.close,
-                                  color: Colors.white,
-                                  size: 28,
+                              child: Focus(
+                                canRequestFocus: false,
+                                descendantsAreFocusable: false,
+                                child: IconButton(
+                                  icon: const Icon(
+                                    Icons.close,
+                                    color: Colors.white,
+                                    size: 28,
+                                  ),
+                                  onPressed: () => Navigator.of(context).pop(),
                                 ),
-                                onPressed: () => Navigator.of(context).pop(),
                               ),
                             ),
                           ),
