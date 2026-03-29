@@ -26,7 +26,7 @@ class _TvKeyboardTextFieldState extends State<TvKeyboardTextField> {
   final FocusNode _textFieldFocusNode = FocusNode(debugLabel: 'tvTextEditor');
   bool _isEditing = false;
 
-  static const Set<LogicalKeyboardKey> _activationKeys = <LogicalKeyboardKey>{
+  static final Set<LogicalKeyboardKey> _activationKeys = <LogicalKeyboardKey>{
     LogicalKeyboardKey.enter,
     LogicalKeyboardKey.select,
     LogicalKeyboardKey.gameButtonA,
