@@ -1,5 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:ui';
+
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -32,27 +35,18 @@ class MoviePlayerScreen extends StatefulWidget {
 }
 
 class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
+  static const Duration _remoteSeekStep = Duration(seconds: 10);
+  static const Duration _controlsHintDuration = Duration(seconds: 8);
+
   late ThaNativePlayerController _ctrl;
+  final GlobalKey _playerSurfaceKey = GlobalKey(debugLabel: 'movie_player_surface');
   final FocusNode _playerFocusNode = FocusNode(debugLabel: 'movie_player_focus');
   Timer? _progressTimer;
+  Timer? _controlsHintTimer;
   String? _errorMessage;
   bool _show4KDialog = false;
-
-  bool _overlayVisible = false;
-  int _focusedButtonIndex = 2; // 0=back10, 1=play/pause, 2=forward10
-  bool _isOnTimeline = false;
-  static const int _timelineSeekSeconds = 60;
-  Timer? _seekHoldTimer;
-  Timer? _overlayHideTimer;
-
-  // Button indices:
-  // 0 = Back 10s
-  // 1 = Play/Pause
-  // 2 = Forward 10s
-  // 3 = Subtitles
-  // 4 = Audio
-  // 5 = Timeline (seek bar)
-  static const int _totalButtons = 6;
+  bool _controlsLikelyVisible = false;
+  int _syntheticPointerId = 9000;
 
   Duration _position = Duration.zero;
   Duration _duration = Duration.zero;
@@ -90,429 +84,144 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
   }
 
 
+  void _markControlsVisibleHint() {
+    _controlsHintTimer?.cancel();
+    _controlsLikelyVisible = true;
+    _controlsHintTimer = Timer(_controlsHintDuration, () {
+      _controlsLikelyVisible = false;
+    });
+  }
 
-  KeyEventResult _handleKeyEvent(KeyEvent event) {
-    if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
-      if (event is KeyUpEvent) {
-        _seekHoldTimer?.cancel();
+  void _focusIntoPlayerOverlay() {
+    if (!mounted) return;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+
+      final scope = FocusScope.of(context);
+      if (_playerFocusNode.hasPrimaryFocus || _playerFocusNode.hasFocus) {
+        scope.nextFocus();
+      }
+    });
+  }
+
+  void _openControlsFromRemote({bool focusOverlay = true}) {
+    _markControlsVisibleHint();
+    _simulateSurfaceTap();
+
+    if (focusOverlay) {
+      _focusIntoPlayerOverlay();
+    }
+  }
+
+  void _hideControlsFromRemote() {
+    _controlsLikelyVisible = false;
+    _simulateSurfaceTap();
+    if (mounted) {
+      _playerFocusNode.requestFocus();
+    }
+  }
+
+  void _simulateSurfaceTap() {
+    final context = _playerSurfaceKey.currentContext;
+    if (context == null) return;
+
+    final box = context.findRenderObject() as RenderBox?;
+    if (box == null || !box.hasSize) return;
+
+    final center = box.localToGlobal(box.size.center(Offset.zero));
+    final pointer = _syntheticPointerId++;
+
+    GestureBinding.instance.handlePointerEvent(
+      PointerDownEvent(
+        pointer: pointer,
+        position: center,
+        kind: PointerDeviceKind.touch,
+      ),
+    );
+    GestureBinding.instance.handlePointerEvent(
+      PointerUpEvent(
+        pointer: pointer,
+        position: center,
+        kind: PointerDeviceKind.touch,
+      ),
+    );
+  }
+
+  void _seekFromRemote(bool forward) {
+    final state = _ctrl.playbackState.value;
+    final max = state.duration;
+    final current = state.position;
+    final target = forward ? current + _remoteSeekStep : current - _remoteSeekStep;
+
+    final clamped = max > Duration.zero
+        ? Duration(milliseconds: target.inMilliseconds.clamp(0, max.inMilliseconds))
+        : Duration(milliseconds: target.inMilliseconds.clamp(0, 1 << 31));
+
+    _ctrl.seekTo(clamped);
+  }
+
+  bool _isSelectKey(LogicalKeyboardKey key) =>
+      key == LogicalKeyboardKey.select ||
+      key == LogicalKeyboardKey.enter ||
+      key == LogicalKeyboardKey.numpadEnter ||
+      key == LogicalKeyboardKey.gameButtonA;
+
+  KeyEventResult _handlePlayerKey(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+
+    final key = event.logicalKey;
+
+    if (key == LogicalKeyboardKey.goBack ||
+        key == LogicalKeyboardKey.escape ||
+        key == LogicalKeyboardKey.browserBack) {
+      if (_controlsLikelyVisible) {
+        _hideControlsFromRemote();
+        return KeyEventResult.handled;
       }
       return KeyEventResult.ignored;
     }
-
-    final key = event.logicalKey;
 
     if (_show4KDialog || _errorMessage != null) {
       return KeyEventResult.ignored;
     }
 
-    // If overlay is hidden, left/right seek directly
-    if (!_overlayVisible) {
-      if (key == LogicalKeyboardKey.arrowLeft ||
-          key == LogicalKeyboardKey.arrowRight ||
-          key == LogicalKeyboardKey.mediaRewind ||
-          key == LogicalKeyboardKey.mediaFastForward) {
-        final isLeft = key == LogicalKeyboardKey.arrowLeft ||
-            key == LogicalKeyboardKey.mediaRewind;
-        _startSeekHold(isLeft ? -10 : 10);
-        return KeyEventResult.handled;
+    if (_isSelectKey(key)) {
+      if (_controlsLikelyVisible) {
+        _markControlsVisibleHint();
+        _focusIntoPlayerOverlay();
+        return KeyEventResult.ignored;
       }
-      // OK/Select shows overlay with play/pause focused
-      if (key == LogicalKeyboardKey.select ||
-          key == LogicalKeyboardKey.enter ||
-          key == LogicalKeyboardKey.numpadEnter ||
-          key == LogicalKeyboardKey.mediaPlayPause) {
-        if (key == LogicalKeyboardKey.mediaPlayPause) {
-          _ctrl.playbackState.value.isPlaying ? _ctrl.pause() : _ctrl.play();
-        } else {
-          _showOverlay();
-        }
+
+      _openControlsFromRemote(focusOverlay: true);
+      return KeyEventResult.handled;
+    }
+
+    if (key == LogicalKeyboardKey.arrowUp || key == LogicalKeyboardKey.arrowDown) {
+      if (!_controlsLikelyVisible) {
+        _openControlsFromRemote(focusOverlay: true);
         return KeyEventResult.handled;
-      }
-      // Back button exits
-      if (key == LogicalKeyboardKey.escape ||
-          key == LogicalKeyboardKey.goBack ||
-          key == LogicalKeyboardKey.browserBack) {
-        Navigator.of(context).pop();
-        return KeyEventResult.handled;
+      } else {
+        _markControlsVisibleHint();
+        _focusIntoPlayerOverlay();
       }
       return KeyEventResult.ignored;
     }
 
-    // Overlay is visible — navigate buttons
-    _resetOverlayTimer();
-
-    if (key == LogicalKeyboardKey.arrowLeft) {
-      if (_isOnTimeline) {
-        // On timeline — seek left faster
-        _startSeekHold(-_timelineSeekSeconds);
-      } else {
-        setState(() {
-          _focusedButtonIndex =
-              (_focusedButtonIndex - 1).clamp(0, _totalButtons - 1);
-          _isOnTimeline = _focusedButtonIndex == 5;
-        });
+    if (key == LogicalKeyboardKey.arrowLeft || key == LogicalKeyboardKey.arrowRight) {
+      if (_controlsLikelyVisible) {
+        _markControlsVisibleHint();
+        _focusIntoPlayerOverlay();
+        return KeyEventResult.ignored;
       }
+
+      _seekFromRemote(key == LogicalKeyboardKey.arrowRight);
+      _openControlsFromRemote(focusOverlay: true);
       return KeyEventResult.handled;
     }
 
-    if (key == LogicalKeyboardKey.arrowRight) {
-      if (_isOnTimeline) {
-        // On timeline — seek right faster
-        _startSeekHold(_timelineSeekSeconds);
-      } else {
-        setState(() {
-          _focusedButtonIndex =
-              (_focusedButtonIndex + 1).clamp(0, _totalButtons - 1);
-          _isOnTimeline = _focusedButtonIndex == 5;
-        });
-      }
-      return KeyEventResult.handled;
-    }
-
-    if (key == LogicalKeyboardKey.arrowUp) {
-      if (_isOnTimeline) {
-        // Move up from timeline to buttons
-        setState(() {
-          _focusedButtonIndex = 1;
-          _isOnTimeline = false;
-        });
-      }
-      return KeyEventResult.handled;
-    }
-
-    if (key == LogicalKeyboardKey.arrowDown) {
-      // Move down to timeline
-      setState(() {
-        _focusedButtonIndex = 5;
-        _isOnTimeline = true;
-      });
-      return KeyEventResult.handled;
-    }
-
-    if (key == LogicalKeyboardKey.select ||
-        key == LogicalKeyboardKey.enter ||
-        key == LogicalKeyboardKey.numpadEnter) {
-      _activateFocusedButton();
-      return KeyEventResult.handled;
-    }
-
-    if (key == LogicalKeyboardKey.escape ||
-        key == LogicalKeyboardKey.goBack ||
-        key == LogicalKeyboardKey.browserBack) {
-      setState(() => _overlayVisible = false);
-      return KeyEventResult.handled;
-    }
-
-    return KeyEventResult.handled;
+    return KeyEventResult.ignored;
   }
-
-  void _showOverlay() {
-    setState(() {
-      _overlayVisible = true;
-      _focusedButtonIndex = 1; // default to play/pause
-      _isOnTimeline = false;
-    });
-    _resetOverlayTimer();
-  }
-
-  void _resetOverlayTimer() {
-    _overlayHideTimer?.cancel();
-    _overlayHideTimer = Timer(const Duration(seconds: 5), () {
-      if (mounted) {
-        setState(() => _overlayVisible = false);
-      }
-    });
-  }
-
-  void _startSeekHold(int seconds) {
-    // Seek once immediately
-    _seek(seconds);
-    // Then keep seeking while held
-    _seekHoldTimer?.cancel();
-    _seekHoldTimer =
-        Timer.periodic(const Duration(milliseconds: 500), (_) => _seek(seconds));
-  }
-
-  void _seek(int seconds) {
-    final current = _ctrl.playbackState.value.position;
-    final duration = _ctrl.playbackState.value.duration;
-    final target = current + Duration(seconds: seconds);
-    final clamped = target < Duration.zero
-        ? Duration.zero
-        : (duration > Duration.zero && target > duration ? duration : target);
-    _ctrl.seekTo(clamped);
-  }
-
-  void _activateFocusedButton() {
-    switch (_focusedButtonIndex) {
-      case 0: // Back 10s
-        _seek(-10);
-        break;
-      case 1: // Play/Pause
-        final playing = _ctrl.playbackState.value.isPlaying;
-        playing ? _ctrl.pause() : _ctrl.play();
-        break;
-      case 2: // Forward 10s
-        _seek(10);
-        break;
-      case 3: // Subtitles - show subtitle selector
-        _showTrackInfoDialog(
-          title: 'Subtitles',
-          message:
-              'Subtitle track selection is not available on this player build yet.',
-        );
-        break;
-      case 4: // Audio - show audio selector
-        _showTrackInfoDialog(
-          title: 'Audio Track',
-          message:
-              'Audio track switching is not available on this player build yet.',
-        );
-        break;
-      case 5: // Timeline - already handled by arrows
-        break;
-    }
-  }
-
-  Widget _buildTvOverlay() {
-    if (!_overlayVisible) return const SizedBox.shrink();
-
-    final state = _ctrl.playbackState.value;
-    final position = state.position;
-    final duration = state.duration;
-    final isPlaying = state.isPlaying;
-    final totalMs = duration.inMilliseconds <= 0
-        ? 1.0
-        : duration.inMilliseconds.toDouble();
-    final sliderValue = position.inMilliseconds.toDouble().clamp(0.0, totalMs);
-
-    return Positioned.fill(
-      child: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              Color(0xCC000000),
-              Colors.transparent,
-              Colors.transparent,
-              Color(0xCC000000),
-            ],
-            stops: [0.0, 0.3, 0.7, 1.0],
-          ),
-        ),
-        child: SafeArea(
-          child: Column(
-            children: [
-              Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        widget.title,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.close, color: Colors.white),
-                      onPressed: () => Navigator.of(context).pop(),
-                    ),
-                  ],
-                ),
-              ),
-              const Spacer(),
-              Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
-                child: Column(
-                  children: [
-                    _buildFocusableButton(
-                      index: 5,
-                      child: SliderTheme(
-                        data: SliderTheme.of(context).copyWith(
-                          activeTrackColor:
-                              _focusedButtonIndex == 5 ? Colors.blue : Colors.white,
-                          thumbColor:
-                              _focusedButtonIndex == 5 ? Colors.blue : Colors.white,
-                          inactiveTrackColor: Colors.white38,
-                          thumbShape: const RoundSliderThumbShape(
-                            enabledThumbRadius: 8,
-                          ),
-                        ),
-                        child: Slider(
-                          value: sliderValue,
-                          min: 0,
-                          max: totalMs,
-                          onChanged: (v) {
-                            _ctrl.seekTo(Duration(milliseconds: v.toInt()));
-                            _resetOverlayTimer();
-                          },
-                        ),
-                      ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 8),
-                      child: Row(
-                        children: [
-                          Text(
-                            _formatDuration(position),
-                            style: const TextStyle(
-                              color: Colors.white70,
-                              fontSize: 13,
-                            ),
-                          ),
-                          const Spacer(),
-                          Text(
-                            _formatDuration(duration),
-                            style: const TextStyle(
-                              color: Colors.white70,
-                              fontSize: 13,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        _buildFocusableButton(
-                          index: 0,
-                          child: const Icon(
-                            Icons.replay_10,
-                            color: Colors.white,
-                            size: 36,
-                          ),
-                          onTap: () => _seek(-10),
-                        ),
-                        const SizedBox(width: 24),
-                        _buildFocusableButton(
-                          index: 1,
-                          child: Icon(
-                            isPlaying ? Icons.pause : Icons.play_arrow,
-                            color: Colors.white,
-                            size: 48,
-                          ),
-                          onTap: () => isPlaying ? _ctrl.pause() : _ctrl.play(),
-                        ),
-                        const SizedBox(width: 24),
-                        _buildFocusableButton(
-                          index: 2,
-                          child: const Icon(
-                            Icons.forward_10,
-                            color: Colors.white,
-                            size: 36,
-                          ),
-                          onTap: () => _seek(10),
-                        ),
-                        const SizedBox(width: 32),
-                        _buildFocusableButton(
-                          index: 3,
-                          child: const Icon(
-                            Icons.closed_caption,
-                            color: Colors.white,
-                            size: 28,
-                          ),
-                          onTap: () {
-                            _showTrackInfoDialog(
-                              title: 'Subtitles',
-                              message:
-                                  'Subtitle track selection is not available on this player build yet.',
-                            );
-                          },
-                        ),
-                        const SizedBox(width: 16),
-                        _buildFocusableButton(
-                          index: 4,
-                          child: const Icon(
-                            Icons.audiotrack,
-                            color: Colors.white,
-                            size: 28,
-                          ),
-                          onTap: () {
-                            _showTrackInfoDialog(
-                              title: 'Audio Track',
-                              message:
-                                  'Audio track switching is not available on this player build yet.',
-                            );
-                          },
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildFocusableButton({
-    required int index,
-    required Widget child,
-    VoidCallback? onTap,
-  }) {
-    final isFocused = _focusedButtonIndex == index && _overlayVisible;
-    return GestureDetector(
-      onTap: () {
-        setState(() {
-          _focusedButtonIndex = index;
-          _isOnTimeline = index == 5;
-        });
-        onTap?.call();
-        _resetOverlayTimer();
-      },
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        padding: const EdgeInsets.all(8),
-        decoration: BoxDecoration(
-          color: isFocused ? Colors.white.withOpacity(0.25) : Colors.transparent,
-          borderRadius: BorderRadius.circular(12),
-          border: isFocused ? Border.all(color: Colors.white, width: 2) : null,
-        ),
-        child: child,
-      ),
-    );
-  }
-
-  String _formatDuration(Duration d) {
-    final h = d.inHours;
-    final m = d.inMinutes.remainder(60).toString().padLeft(2, '0');
-    final s = d.inSeconds.remainder(60).toString().padLeft(2, '0');
-    return h > 0 ? '$h:$m:$s' : '${d.inMinutes}:$s';
-  }
-
-  Future<void> _showTrackInfoDialog({
-    required String title,
-    required String message,
-  }) async {
-    _resetOverlayTimer();
-    await showDialog<void>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF1E1E2E),
-        title: Text(title, style: const TextStyle(color: Colors.white)),
-        content: Text(message, style: const TextStyle(color: Colors.white70)),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('OK'),
-          ),
-        ],
-      ),
-    );
-  }
-
   void _onError(String? error) {
     if (!mounted) return;
     final errorStr = error ?? '';
@@ -605,8 +314,7 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
   void dispose() {
     _restoreLandscapeAndSystemUi();
     _progressTimer?.cancel();
-    _seekHoldTimer?.cancel();
-    _overlayHideTimer?.cancel();
+    _controlsHintTimer?.cancel();
     _playerFocusNode.dispose();
     unawaited(_saveProgress(force: true));
     try {
@@ -628,15 +336,18 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
       },
       child: Scaffold(
         backgroundColor: Colors.black,
-        body: Focus(
-          focusNode: _playerFocusNode,
-          autofocus: true,
-          onKeyEvent: (node, event) => _handleKeyEvent(event),
-          child: SizedBox.expand(
-            child: Stack(
+        body: SizedBox.expand(
+          child: Stack(
             children: [
               Positioned.fill(
-                child: ThaModernPlayer(
+                child: Focus(
+                  focusNode: _playerFocusNode,
+                  autofocus: true,
+                  onKeyEvent: _handlePlayerKey,
+                  child: Container(
+                    key: _playerSurfaceKey,
+                    color: Colors.transparent,
+                    child: ThaModernPlayer(
                       controller: _ctrl,
                       doubleTapSeek: const Duration(seconds: 10),
                       autoHideAfter: const Duration(seconds: 3),
@@ -688,12 +399,9 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
                           ),
                         ],
                       ),
+                    ),
+                  ),
                 ),
-              ),
-
-              ValueListenableBuilder<ThaPlaybackState>(
-                valueListenable: _ctrl.playbackState,
-                builder: (_, state, __) => _buildTvOverlay(),
               ),
 
               if (_show4KDialog)
@@ -802,7 +510,6 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
             ],
           ),
         ),
-      ),
       ),
     );
   }
