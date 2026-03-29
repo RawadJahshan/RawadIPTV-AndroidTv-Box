@@ -7,6 +7,7 @@ import '../../../data/models/movie_item.dart';
 import '../../../data/services/favorites_service.dart';
 import '../../../data/services/watch_progress_service.dart';
 import 'movie_detail_screen.dart';
+import '../../widgets/tv_keyboard_text_field.dart';
 
 class MovieListScreen extends StatefulWidget {
   final XtreamApi xtreamApi;
@@ -260,7 +261,7 @@ class _MovieListScreenState extends State<MovieListScreen> {
                 horizontal: 8,
                 vertical: 6,
               ),
-              child: TextField(
+              child: TvKeyboardTextField(
                 controller: _searchController,
                 style: const TextStyle(
                   color: Colors.white,
@@ -455,6 +456,7 @@ class _MovieCard extends StatefulWidget {
 
 class _MovieCardState extends State<_MovieCard> {
   bool _isHovering = false;
+  bool _isFocused = false;
 
   @override
   Widget build(BuildContext context) {
@@ -468,6 +470,7 @@ class _MovieCardState extends State<_MovieCard> {
       builder: (context, snapshot) {
         final progress = snapshot.data;
         final progressValue = (progress?.progressPercent ?? 0.0).clamp(0.0, 1.0);
+        final isActive = _isHovering || _isFocused;
 
         return MouseRegion(
           onEnter: (_) {
@@ -482,7 +485,7 @@ class _MovieCardState extends State<_MovieCard> {
           },
           child: AnimatedScale(
             duration: const Duration(milliseconds: 180),
-            scale: _isHovering ? 1.02 : 1,
+            scale: isActive ? 1.02 : 1,
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 180),
               decoration: BoxDecoration(
@@ -493,11 +496,11 @@ class _MovieCardState extends State<_MovieCard> {
                 ),
                 borderRadius: BorderRadius.circular(10),
                 border: Border.all(
-                  color: _isHovering ? const Color(0xFF00C6FF).withValues(alpha: 0.6) : Colors.transparent,
+                  color: isActive ? const Color(0xFF00C6FF).withValues(alpha: 0.6) : Colors.transparent,
                   width: 1.2,
                 ),
                 boxShadow: [
-                  if (_isHovering)
+                  if (isActive)
                     BoxShadow(
                       color: const Color(0xFF00C6FF).withValues(alpha: 0.28),
                       blurRadius: 14,
@@ -510,6 +513,7 @@ class _MovieCardState extends State<_MovieCard> {
                 child: Material(
                   color: Colors.transparent,
                   child: InkWell(
+                    onFocusChange: (focused) => setState(() => _isFocused = focused),
                     onTap: widget.onTap,
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -520,7 +524,7 @@ class _MovieCardState extends State<_MovieCard> {
                             children: [
                               ColorFiltered(
                                 colorFilter: ColorFilter.mode(
-                                  Colors.white.withValues(alpha: _isHovering ? 0.12 : 0),
+                                  Colors.white.withValues(alpha: isActive ? 0.12 : 0),
                                   BlendMode.screen,
                                 ),
                                 child: Image.network(

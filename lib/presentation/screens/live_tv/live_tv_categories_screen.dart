@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import '../../../data/datasources/remote/xtream_api.dart';
 import '../../../data/models/live_tv_category.dart';
 import 'channels_detail_screen.dart';
+import '../../widgets/tv_keyboard_text_field.dart';
 
 class LiveTvCategoriesScreen extends StatefulWidget {
   final XtreamApi xtreamApi;
@@ -94,7 +95,7 @@ class _LiveTvCategoriesScreenState
                   horizontal: 8,
                   vertical: 6,
                 ),
-                child: TextField(
+                child: TvKeyboardTextField(
                   controller: _searchController,
                   style: const TextStyle(
                     color: Colors.white,
@@ -215,6 +216,10 @@ class _LiveTvCategoriesScreenState
 
   Widget _buildCategoryTile(LiveTvCategory category, double Function(double) getFontSize) {
     return ListTile(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      tileColor: const Color(0xFF141827),
+      focusColor: const Color(0x332296F3),
+      hoverColor: const Color(0x332296F3),
       minTileHeight: 56,
       contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       leading: const Icon(

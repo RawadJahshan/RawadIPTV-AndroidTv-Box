@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../../../data/datasources/remote/xtream_api.dart';
 import '../../../data/models/movie_category.dart';
 import 'movie_list_screen.dart';
+import '../../widgets/tv_keyboard_text_field.dart';
 
 class MoviesScreen extends StatefulWidget {
   final XtreamApi xtreamApi;
@@ -101,7 +102,7 @@ class _MoviesScreenState extends State<MoviesScreen> {
                   horizontal: 8,
                   vertical: 6,
                 ),
-                child: TextField(
+                child: TvKeyboardTextField(
                   controller: _searchController,
                   style: const TextStyle(
                     color: Colors.white,
@@ -189,6 +190,10 @@ class _MoviesScreenState extends State<MoviesScreen> {
 
   Widget _buildCategoryTile(MovieCategory category) {
     return ListTile(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      tileColor: const Color(0xFF141827),
+      focusColor: const Color(0x332296F3),
+      hoverColor: const Color(0x332296F3),
       contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       minTileHeight: 56,
       title: Text(
