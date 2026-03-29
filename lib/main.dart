@@ -26,7 +26,42 @@ class MyApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: ThemeData.dark().copyWith(
         scaffoldBackgroundColor: const Color(0xFF1E1E1E),
+        focusColor: Colors.blueAccent.withValues(alpha: 0.35),
+        listTileTheme: const ListTileThemeData(
+          selectedTileColor: Color(0x332196F3),
+        ),
       ),
+      builder: (context, child) {
+        return Shortcuts(
+          shortcuts: const <ShortcutActivator, Intent>{
+            SingleActivator(LogicalKeyboardKey.select): ActivateIntent(),
+            SingleActivator(LogicalKeyboardKey.enter): ActivateIntent(),
+            SingleActivator(LogicalKeyboardKey.numpadEnter): ActivateIntent(),
+            SingleActivator(LogicalKeyboardKey.goBack): DismissIntent(),
+            SingleActivator(LogicalKeyboardKey.escape): DismissIntent(),
+          },
+          child: Actions(
+            actions: <Type, Action<Intent>>{
+              DismissIntent: CallbackAction<DismissIntent>(
+                onInvoke: (_) {
+                  final navigator = Navigator.maybeOf(context);
+                  if (navigator != null && navigator.canPop()) {
+                    navigator.pop();
+                  }
+                  return null;
+                },
+              ),
+            },
+            child: FocusTraversalGroup(
+              policy: ReadingOrderTraversalPolicy(),
+              child: Focus(
+                autofocus: true,
+                child: child ?? const SizedBox.shrink(),
+              ),
+            ),
+          ),
+        );
+      },
       home: const ProfilesScreen(),
       onGenerateRoute: (settings) {
         if (settings.name == '/favorites') {

@@ -36,8 +36,8 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
   void initState() {
     super.initState();
     SystemChrome.setPreferredOrientations([
-      DeviceOrientation.portraitUp,
-      DeviceOrientation.portraitDown,
+      DeviceOrientation.landscapeLeft,
+      DeviceOrientation.landscapeRight,
     ]);
     _loadProfiles();
   }
@@ -209,8 +209,9 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
                             itemBuilder: (context, index) {
                               if (index == _profiles.length) {
                                 // Add new profile button
-                                return GestureDetector(
+                                return InkWell(
                                   onTap: _showAddProfileDialog,
+                                  borderRadius: BorderRadius.circular(16),
                                   child: Container(
                                     decoration: BoxDecoration(
                                       color: const Color(0xFF2A2A3E),
@@ -284,8 +285,9 @@ class _ProfileCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
+    return InkWell(
       onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
       child: Container(
         decoration: BoxDecoration(
           color: const Color(0xFF2A2A3E),
@@ -374,8 +376,9 @@ class _ProfileCard extends StatelessWidget {
             Positioned(
               top: 8,
               right: 8,
-              child: GestureDetector(
+              child: InkWell(
                 onTap: onDelete,
+                customBorder: const CircleBorder(),
                 child: Container(
                   padding: const EdgeInsets.all(4),
                   decoration: BoxDecoration(
