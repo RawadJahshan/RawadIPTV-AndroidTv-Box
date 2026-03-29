@@ -277,56 +277,57 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
                   autofocus: true,
                   onKeyEvent: _handlePlayerKey,
                   child: ThaModernPlayer(
-                  controller: _ctrl,
-                  doubleTapSeek: const Duration(seconds: 10),
-                  autoHideAfter: const Duration(seconds: 3),
-                  initialBoxFit: BoxFit.contain,
-                  autoFullscreen: false,
-                  isFullscreen: true,
-                  onError: _onError,
-                  overlay: Stack(
-                    children: [
-                      Positioned(
-                        top: 0,
-                        left: 0,
-                        right: 60,
-                        child: SafeArea(
-                          child: Padding(
-                            padding: const EdgeInsets.all(12),
-                            child: Text(
-                              widget.title,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 15,
-                                fontWeight: FontWeight.w600,
-                                shadows: [
-                                  Shadow(
-                                    color: Colors.black54,
-                                    blurRadius: 4,
-                                  ),
-                                ],
+                    controller: _ctrl,
+                    doubleTapSeek: const Duration(seconds: 10),
+                    autoHideAfter: const Duration(seconds: 3),
+                    initialBoxFit: BoxFit.contain,
+                    autoFullscreen: false,
+                    isFullscreen: true,
+                    onError: _onError,
+                    overlay: Stack(
+                      children: [
+                        Positioned(
+                          top: 0,
+                          left: 0,
+                          right: 60,
+                          child: SafeArea(
+                            child: Padding(
+                              padding: const EdgeInsets.all(12),
+                              child: Text(
+                                widget.title,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w600,
+                                  shadows: [
+                                    Shadow(
+                                      color: Colors.black54,
+                                      blurRadius: 4,
+                                    ),
+                                  ],
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
                               ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
                             ),
                           ),
                         ),
-                      ),
-                      Positioned(
-                        top: 0,
-                        right: 0,
-                        child: SafeArea(
-                          child: IconButton(
-                            icon: const Icon(
-                              Icons.close,
-                              color: Colors.white,
-                              size: 28,
+                        Positioned(
+                          top: 0,
+                          right: 0,
+                          child: SafeArea(
+                            child: IconButton(
+                              icon: const Icon(
+                                Icons.close,
+                                color: Colors.white,
+                                size: 28,
+                              ),
+                              onPressed: () => Navigator.of(context).pop(),
                             ),
-                            onPressed: () => Navigator.of(context).pop(),
                           ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               ),
