@@ -35,7 +35,6 @@ class MoviePlayerScreen extends StatefulWidget {
 }
 
 class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
-  static const Duration _remoteSeekStep = Duration(seconds: 10);
   static const Duration _controlsHintDuration = Duration(seconds: 8);
 
   late ThaNativePlayerController _ctrl;
@@ -134,19 +133,6 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
     );
   }
 
-  void _seekFromRemote(bool forward) {
-    final state = _ctrl.playbackState.value;
-    final max = state.duration;
-    final current = state.position;
-    final target = forward ? current + _remoteSeekStep : current - _remoteSeekStep;
-
-    final clamped = max > Duration.zero
-        ? Duration(milliseconds: target.inMilliseconds.clamp(0, max.inMilliseconds))
-        : Duration(milliseconds: target.inMilliseconds.clamp(0, 1 << 31));
-
-    _ctrl.seekTo(clamped);
-  }
-
   bool _isSelectKey(LogicalKeyboardKey key) =>
       key == LogicalKeyboardKey.select ||
       key == LogicalKeyboardKey.enter ||
@@ -173,28 +159,26 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
     }
 
     if (_isSelectKey(key)) {
-      if (_controlsLikelyVisible) {
-        _markControlsVisibleHint();
-        _simulateSurfaceTap();
+      if (!_controlsLikelyVisible) {
+        _openControlsFromRemote();
         return KeyEventResult.handled;
       }
 
-      _openControlsFromRemote();
-      return KeyEventResult.handled;
+      _markControlsVisibleHint();
+      return KeyEventResult.ignored;
     }
 
-    if (key == LogicalKeyboardKey.arrowUp || key == LogicalKeyboardKey.arrowDown) {
+    if (key == LogicalKeyboardKey.arrowUp ||
+        key == LogicalKeyboardKey.arrowDown ||
+        key == LogicalKeyboardKey.arrowLeft ||
+        key == LogicalKeyboardKey.arrowRight) {
       if (!_controlsLikelyVisible) {
         _openControlsFromRemote();
+        return KeyEventResult.handled;
       }
-      _markControlsVisibleHint();
-      return KeyEventResult.handled;
-    }
 
-    if (key == LogicalKeyboardKey.arrowLeft || key == LogicalKeyboardKey.arrowRight) {
-      _seekFromRemote(key == LogicalKeyboardKey.arrowRight);
-      _openControlsFromRemote();
-      return KeyEventResult.handled;
+      _markControlsVisibleHint();
+      return KeyEventResult.ignored;
     }
 
     return KeyEventResult.ignored;
