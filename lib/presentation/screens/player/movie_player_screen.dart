@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:ui';
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -34,15 +36,17 @@ class MoviePlayerScreen extends StatefulWidget {
 
 class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
   static const Duration _remoteSeekStep = Duration(seconds: 10);
-  static const Duration _controlsHintDuration = Duration(seconds: 3);
+  static const Duration _controlsHintDuration = Duration(seconds: 8);
 
   late ThaNativePlayerController _ctrl;
+  final GlobalKey _playerSurfaceKey = GlobalKey(debugLabel: 'movie_player_surface');
   final FocusNode _playerFocusNode = FocusNode(debugLabel: 'movie_player_focus');
   Timer? _progressTimer;
   Timer? _controlsHintTimer;
   String? _errorMessage;
   bool _show4KDialog = false;
   bool _controlsLikelyVisible = false;
+  int _syntheticPointerId = 9000;
 
   Duration _position = Duration.zero;
   Duration _duration = Duration.zero;
@@ -88,14 +92,41 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
     });
   }
 
-  void _togglePlayPauseFromRemote() {
+  void _openControlsFromRemote() {
     final isPlaying = _ctrl.playbackState.value.isPlaying;
+
     if (isPlaying) {
       _ctrl.pause();
-    } else {
-      _ctrl.play();
     }
+
     _markControlsVisibleHint();
+    _simulateSurfaceTap();
+  }
+
+  void _simulateSurfaceTap() {
+    final context = _playerSurfaceKey.currentContext;
+    if (context == null) return;
+
+    final box = context.findRenderObject() as RenderBox?;
+    if (box == null || !box.hasSize) return;
+
+    final center = box.localToGlobal(box.size.center(Offset.zero));
+    final pointer = _syntheticPointerId++;
+
+    GestureBinding.instance.handlePointerEvent(
+      PointerDownEvent(
+        pointer: pointer,
+        position: center,
+        kind: PointerDeviceKind.touch,
+      ),
+    );
+    GestureBinding.instance.handlePointerEvent(
+      PointerUpEvent(
+        pointer: pointer,
+        position: center,
+        kind: PointerDeviceKind.touch,
+      ),
+    );
   }
 
   void _seekFromRemote(bool forward) {
@@ -133,12 +164,21 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
     }
 
     if (_isSelectKey(key)) {
-      _togglePlayPauseFromRemote();
+      if (_controlsLikelyVisible) {
+        _markControlsVisibleHint();
+        return KeyEventResult.ignored;
+      }
+
+      _openControlsFromRemote();
       return KeyEventResult.handled;
     }
 
     if (key == LogicalKeyboardKey.arrowUp || key == LogicalKeyboardKey.arrowDown) {
-      _markControlsVisibleHint();
+      if (!_controlsLikelyVisible) {
+        _openControlsFromRemote();
+      } else {
+        _markControlsVisibleHint();
+      }
       return KeyEventResult.ignored;
     }
 
@@ -149,6 +189,7 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
       }
 
       _seekFromRemote(key == LogicalKeyboardKey.arrowRight);
+      _openControlsFromRemote();
       return KeyEventResult.handled;
     }
 
@@ -276,57 +317,61 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
                   focusNode: _playerFocusNode,
                   autofocus: true,
                   onKeyEvent: _handlePlayerKey,
-                  child: ThaModernPlayer(
-                    controller: _ctrl,
-                    doubleTapSeek: const Duration(seconds: 10),
-                    autoHideAfter: const Duration(seconds: 3),
-                    initialBoxFit: BoxFit.contain,
-                    autoFullscreen: false,
-                    isFullscreen: true,
-                    onError: _onError,
-                    overlay: Stack(
-                      children: [
-                        Positioned(
-                          top: 0,
-                          left: 0,
-                          right: 60,
-                          child: SafeArea(
-                            child: Padding(
-                              padding: const EdgeInsets.all(12),
-                              child: Text(
-                                widget.title,
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.w600,
-                                  shadows: [
-                                    Shadow(
-                                      color: Colors.black54,
-                                      blurRadius: 4,
-                                    ),
-                                  ],
+                  child: Container(
+                    key: _playerSurfaceKey,
+                    color: Colors.transparent,
+                    child: ThaModernPlayer(
+                      controller: _ctrl,
+                      doubleTapSeek: const Duration(seconds: 10),
+                      autoHideAfter: const Duration(seconds: 3),
+                      initialBoxFit: BoxFit.contain,
+                      autoFullscreen: false,
+                      isFullscreen: true,
+                      onError: _onError,
+                      overlay: Stack(
+                        children: [
+                          Positioned(
+                            top: 0,
+                            left: 0,
+                            right: 60,
+                            child: SafeArea(
+                              child: Padding(
+                                padding: const EdgeInsets.all(12),
+                                child: Text(
+                                  widget.title,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w600,
+                                    shadows: [
+                                      Shadow(
+                                        color: Colors.black54,
+                                        blurRadius: 4,
+                                      ),
+                                    ],
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
                                 ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
                               ),
                             ),
                           ),
-                        ),
-                        Positioned(
-                          top: 0,
-                          right: 0,
-                          child: SafeArea(
-                            child: IconButton(
-                              icon: const Icon(
-                                Icons.close,
-                                color: Colors.white,
-                                size: 28,
+                          Positioned(
+                            top: 0,
+                            right: 0,
+                            child: SafeArea(
+                              child: IconButton(
+                                icon: const Icon(
+                                  Icons.close,
+                                  color: Colors.white,
+                                  size: 28,
+                                ),
+                                onPressed: () => Navigator.of(context).pop(),
                               ),
-                              onPressed: () => Navigator.of(context).pop(),
                             ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
                 ),
