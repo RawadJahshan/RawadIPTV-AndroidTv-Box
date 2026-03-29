@@ -5,6 +5,7 @@ import 'dart:ui';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tha_player/tha_player.dart';
 
@@ -94,17 +95,23 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
   void _openControlsFromRemote() {
     _markControlsVisibleHint();
     _simulateSurfaceTap();
-    if (mounted) {
-      _playerFocusNode.requestFocus();
-    }
+    _focusPlayPauseAfterOverlayShown();
   }
 
-  void _hideControlsFromRemote() {
-    _controlsLikelyVisible = false;
-    _simulateSurfaceTap();
-    if (mounted) {
-      _playerFocusNode.requestFocus();
-    }
+  void _focusPlayPauseAfterOverlayShown() {
+    if (!mounted) return;
+
+    _playerFocusNode.requestFocus();
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (_playerFocusNode.hasFocus) {
+        _playerFocusNode.nextFocus();
+      } else {
+        _playerFocusNode.requestFocus();
+        _playerFocusNode.nextFocus();
+      }
+    });
   }
 
   void _simulateSurfaceTap() {
@@ -139,20 +146,19 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
       key == LogicalKeyboardKey.numpadEnter ||
       key == LogicalKeyboardKey.gameButtonA;
 
+  bool _isArrowKey(LogicalKeyboardKey key) =>
+      key == LogicalKeyboardKey.arrowUp ||
+      key == LogicalKeyboardKey.arrowDown ||
+      key == LogicalKeyboardKey.arrowLeft ||
+      key == LogicalKeyboardKey.arrowRight;
+
+  bool get _isAndroidPlatform => defaultTargetPlatform == TargetPlatform.android;
+
   KeyEventResult _handlePlayerKey(FocusNode node, KeyEvent event) {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
+    if (!_isAndroidPlatform) return KeyEventResult.ignored;
 
     final key = event.logicalKey;
-
-    if (key == LogicalKeyboardKey.goBack ||
-        key == LogicalKeyboardKey.escape ||
-        key == LogicalKeyboardKey.browserBack) {
-      if (_controlsLikelyVisible) {
-        _hideControlsFromRemote();
-        return KeyEventResult.handled;
-      }
-      return KeyEventResult.ignored;
-    }
 
     if (_show4KDialog || _errorMessage != null) {
       return KeyEventResult.ignored;
@@ -168,16 +174,24 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
       return KeyEventResult.ignored;
     }
 
-    if (key == LogicalKeyboardKey.arrowUp ||
-        key == LogicalKeyboardKey.arrowDown ||
-        key == LogicalKeyboardKey.arrowLeft ||
-        key == LogicalKeyboardKey.arrowRight) {
+    if (_isArrowKey(key)) {
       if (!_controlsLikelyVisible) {
         _openControlsFromRemote();
         return KeyEventResult.handled;
       }
 
       _markControlsVisibleHint();
+      if (_playerFocusNode.hasFocus) {
+        final direction = switch (key) {
+          LogicalKeyboardKey.arrowUp => TraversalDirection.up,
+          LogicalKeyboardKey.arrowDown => TraversalDirection.down,
+          LogicalKeyboardKey.arrowLeft => TraversalDirection.left,
+          LogicalKeyboardKey.arrowRight => TraversalDirection.right,
+          _ => TraversalDirection.right,
+        };
+        _playerFocusNode.focusInDirection(direction);
+        return KeyEventResult.handled;
+      }
       return KeyEventResult.ignored;
     }
 
@@ -305,6 +319,11 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
                   focusNode: _playerFocusNode,
                   autofocus: true,
                   onKeyEvent: _handlePlayerKey,
+                  onFocusChange: (hasFocus) {
+                    if (hasFocus && _controlsLikelyVisible) {
+                      _markControlsVisibleHint();
+                    }
+                  },
                   child: Container(
                     key: _playerSurfaceKey,
                     color: Colors.transparent,
