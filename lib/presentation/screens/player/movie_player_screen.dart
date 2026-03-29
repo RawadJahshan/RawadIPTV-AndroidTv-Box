@@ -37,16 +37,23 @@ class MoviePlayerScreen extends StatefulWidget {
 
 class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
   static const Duration _controlsHintDuration = Duration(seconds: 8);
+  static const Duration _remoteAutoHideDuration = Duration(seconds: 3);
+  static const Duration _tvSeekStep = Duration(seconds: 10);
 
   late ThaNativePlayerController _ctrl;
   final GlobalKey _playerSurfaceKey = GlobalKey(debugLabel: 'movie_player_surface');
   final FocusNode _playerFocusNode = FocusNode(debugLabel: 'movie_player_focus');
+  final FocusScopeNode _playerScopeNode = FocusScopeNode(
+    debugLabel: 'movie_player_scope',
+  );
   Timer? _progressTimer;
   Timer? _controlsHintTimer;
+  Timer? _remoteAutoHideTimer;
   String? _errorMessage;
   bool _show4KDialog = false;
   bool _controlsLikelyVisible = false;
   int _syntheticPointerId = 9000;
+  Duration? _pendingTimelineSeek;
 
   Duration _position = Duration.zero;
   Duration _duration = Duration.zero;
@@ -85,11 +92,13 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
 
 
   void _markControlsVisibleHint() {
+    _remoteAutoHideTimer?.cancel();
     _controlsHintTimer?.cancel();
     _controlsLikelyVisible = true;
     _controlsHintTimer = Timer(_controlsHintDuration, () {
       _controlsLikelyVisible = false;
     });
+    _remoteAutoHideTimer = Timer(_remoteAutoHideDuration, _hideControlsFromInactivity);
   }
 
   void _openControlsFromRemote() {
@@ -154,6 +163,65 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
 
   bool get _isAndroidPlatform => defaultTargetPlatform == TargetPlatform.android;
 
+  void _hideControlsFromInactivity() {
+    if (!mounted || !_controlsLikelyVisible) return;
+    setState(() {
+      _controlsLikelyVisible = false;
+      _pendingTimelineSeek = null;
+    });
+    _simulateSurfaceTap();
+    _playerFocusNode.requestFocus();
+  }
+
+  bool _isTimelineFocused() {
+    final focus = FocusManager.instance.primaryFocus;
+    if (focus == null) return false;
+    final label = (focus.debugLabel ?? '').toLowerCase();
+    if (label.contains('timeline') ||
+        label.contains('seek') ||
+        label.contains('slider') ||
+        label.contains('progress')) {
+      return true;
+    }
+    final widgetName = focus.context?.widget.runtimeType.toString().toLowerCase() ?? '';
+    return widgetName.contains('slider') ||
+        widgetName.contains('seek') ||
+        widgetName.contains('progress');
+  }
+
+  Duration _coercePendingSeek(Duration value) {
+    final max = _duration > Duration.zero ? _duration : value;
+    if (value < Duration.zero) return Duration.zero;
+    if (max <= Duration.zero) return value;
+    return value > max ? max : value;
+  }
+
+  void _updatePendingSeek(LogicalKeyboardKey key) {
+    final base = _pendingTimelineSeek ?? _position;
+    final next = switch (key) {
+      LogicalKeyboardKey.arrowLeft => base - _tvSeekStep,
+      LogicalKeyboardKey.arrowRight => base + _tvSeekStep,
+      _ => base,
+    };
+    setState(() {
+      _pendingTimelineSeek = _coercePendingSeek(next);
+    });
+    _markControlsVisibleHint();
+  }
+
+  Future<void> _confirmPendingSeek() async {
+    final pending = _pendingTimelineSeek;
+    if (pending == null) return;
+    setState(() {
+      _pendingTimelineSeek = null;
+    });
+    await _ctrl.seekTo(pending);
+    _markControlsVisibleHint();
+    if (mounted) {
+      FocusManager.instance.primaryFocus?.requestFocus();
+    }
+  }
+
   KeyEventResult _handlePlayerKey(FocusNode node, KeyEvent event) {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
     if (!_isAndroidPlatform) return KeyEventResult.ignored;
@@ -169,6 +237,10 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
         _openControlsFromRemote();
         return KeyEventResult.handled;
       }
+      if (_isTimelineFocused() && _pendingTimelineSeek != null) {
+        unawaited(_confirmPendingSeek());
+        return KeyEventResult.handled;
+      }
 
       _markControlsVisibleHint();
       return KeyEventResult.ignored;
@@ -177,6 +249,13 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
     if (_isArrowKey(key)) {
       if (!_controlsLikelyVisible) {
         _openControlsFromRemote();
+        return KeyEventResult.handled;
+      }
+
+      if (_isTimelineFocused() &&
+          (key == LogicalKeyboardKey.arrowLeft ||
+              key == LogicalKeyboardKey.arrowRight)) {
+        _updatePendingSeek(key);
         return KeyEventResult.handled;
       }
 
@@ -290,6 +369,8 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
     _restoreLandscapeAndSystemUi();
     _progressTimer?.cancel();
     _controlsHintTimer?.cancel();
+    _remoteAutoHideTimer?.cancel();
+    _playerScopeNode.dispose();
     _playerFocusNode.dispose();
     unawaited(_saveProgress(force: true));
     try {
@@ -315,73 +396,104 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
           child: Stack(
             children: [
               Positioned.fill(
-                child: Focus(
-                  focusNode: _playerFocusNode,
-                  autofocus: true,
-                  onKeyEvent: _handlePlayerKey,
-                  onFocusChange: (hasFocus) {
-                    if (hasFocus && _controlsLikelyVisible) {
-                      _markControlsVisibleHint();
-                    }
-                  },
-                  child: Container(
-                    key: _playerSurfaceKey,
-                    color: Colors.transparent,
-                    child: ThaModernPlayer(
-                      controller: _ctrl,
-                      doubleTapSeek: const Duration(seconds: 10),
-                      autoHideAfter: const Duration(seconds: 3),
-                      initialBoxFit: BoxFit.contain,
-                      autoFullscreen: false,
-                      isFullscreen: true,
-                      onError: _onError,
-                      overlay: Stack(
-                        children: [
-                          Positioned(
-                            top: 0,
-                            left: 0,
-                            right: 60,
-                            child: SafeArea(
-                              child: Padding(
-                                padding: const EdgeInsets.all(12),
-                                child: Text(
-                                  widget.title,
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.w600,
-                                    shadows: [
-                                      Shadow(
-                                        color: Colors.black54,
-                                        blurRadius: 4,
+                child: FocusTraversalGroup(
+                  child: FocusScope(
+                    node: _playerScopeNode,
+                    child: Focus(
+                      focusNode: _playerFocusNode,
+                      autofocus: true,
+                      onKeyEvent: _handlePlayerKey,
+                      onFocusChange: (hasFocus) {
+                        if (hasFocus && _controlsLikelyVisible) {
+                          _markControlsVisibleHint();
+                        }
+                      },
+                      child: Container(
+                        key: _playerSurfaceKey,
+                        color: Colors.transparent,
+                        child: ThaModernPlayer(
+                          controller: _ctrl,
+                          doubleTapSeek: const Duration(seconds: 10),
+                          autoHideAfter: const Duration(seconds: 3),
+                          initialBoxFit: BoxFit.contain,
+                          autoFullscreen: false,
+                          isFullscreen: true,
+                          onError: _onError,
+                          overlay: Stack(
+                            children: [
+                              Positioned(
+                                top: 0,
+                                left: 0,
+                                right: 60,
+                                child: SafeArea(
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(12),
+                                    child: Text(
+                                      widget.title,
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.w600,
+                                        shadows: [
+                                          Shadow(
+                                            color: Colors.black54,
+                                            blurRadius: 4,
+                                          ),
+                                        ],
                                       ),
-                                    ],
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
                                   ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
                                 ),
                               ),
-                            ),
-                          ),
-                          Positioned(
-                            top: 0,
-                            right: 0,
-                            child: SafeArea(
-                              child: Focus(
-                                canRequestFocus: false,
-                                descendantsAreFocusable: false,
-                                child: IconButton(
-                                  icon: const Icon(
-                                    Icons.close,
-                                    color: Colors.white,
-                                    size: 28,
+                              if (_pendingTimelineSeek != null)
+                                Positioned(
+                                  top: 50,
+                                  left: 12,
+                                  child: SafeArea(
+                                    child: DecoratedBox(
+                                      decoration: BoxDecoration(
+                                        color: Colors.black87,
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      child: Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 10,
+                                          vertical: 6,
+                                        ),
+                                        child: Text(
+                                          'Seek: ${_pendingTimelineSeek!.inMinutes.remainder(60).toString().padLeft(2, '0')}:${_pendingTimelineSeek!.inSeconds.remainder(60).toString().padLeft(2, '0')}',
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
                                   ),
-                                  onPressed: () => Navigator.of(context).pop(),
+                                ),
+                              Positioned(
+                                top: 0,
+                                right: 0,
+                                child: SafeArea(
+                                  child: Focus(
+                                    canRequestFocus: false,
+                                    descendantsAreFocusable: false,
+                                    child: IconButton(
+                                      icon: const Icon(
+                                        Icons.close,
+                                        color: Colors.white,
+                                        size: 28,
+                                      ),
+                                      onPressed: () => Navigator.of(context).pop(),
+                                    ),
+                                  ),
                                 ),
                               ),
-                            ),
+                            ],
                           ),
-                        ],
+                        ),
                       ),
                     ),
                   ),
