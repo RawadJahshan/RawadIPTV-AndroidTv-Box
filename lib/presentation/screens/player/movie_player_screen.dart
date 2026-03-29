@@ -88,13 +88,13 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
     });
   }
 
-  void _togglePlayPauseFromRemote() {
+  void _openControlsFromRemote() {
     final isPlaying = _ctrl.playbackState.value.isPlaying;
+
     if (isPlaying) {
       _ctrl.pause();
-    } else {
-      _ctrl.play();
     }
+
     _markControlsVisibleHint();
   }
 
@@ -133,7 +133,12 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
     }
 
     if (_isSelectKey(key)) {
-      _togglePlayPauseFromRemote();
+      if (_controlsLikelyVisible) {
+        _markControlsVisibleHint();
+        return KeyEventResult.ignored;
+      }
+
+      _openControlsFromRemote();
       return KeyEventResult.handled;
     }
 
@@ -149,6 +154,7 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
       }
 
       _seekFromRemote(key == LogicalKeyboardKey.arrowRight);
+      _markControlsVisibleHint();
       return KeyEventResult.handled;
     }
 
