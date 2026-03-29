@@ -8,6 +8,7 @@ import '../../../data/datasources/remote/xtream_api.dart';
 import '../../../data/models/profile.dart';
 import '../../../data/models/user_info.dart';
 import '../../../data/services/profile_service.dart';
+import '../../widgets/tv_keyboard_text_field.dart';
 import '../home/home_dashboard.dart';
 import 'package:intl/intl.dart';
 
@@ -537,7 +538,7 @@ class _AddProfileDialogState extends State<_AddProfileDialog> {
             const SizedBox(height: 16),
 
             // Password
-            TextField(
+            TvKeyboardTextField(
               controller: _passwordController,
               obscureText: _obscurePassword,
               style: const TextStyle(color: Colors.white),
@@ -625,7 +626,7 @@ class _AddProfileDialogState extends State<_AddProfileDialog> {
     required String hint,
     required IconData icon,
   }) {
-    return TextField(
+    return TvKeyboardTextField(
       controller: controller,
       style: const TextStyle(color: Colors.white),
       decoration: InputDecoration(

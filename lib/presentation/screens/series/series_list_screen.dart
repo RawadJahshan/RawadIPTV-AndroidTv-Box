@@ -10,6 +10,7 @@ import '../../../data/services/favorites_service.dart';
 import '../../../data/services/watch_progress_service.dart';
 import '../player/movie_player_screen.dart';
 import 'series_detail_screen.dart';
+import '../../widgets/tv_keyboard_text_field.dart';
 
 class SeriesListScreen extends StatefulWidget {
   final XtreamApi xtreamApi;
@@ -374,7 +375,7 @@ class _SeriesListScreenState extends State<SeriesListScreen> {
                 horizontal: 8,
                 vertical: 6,
               ),
-              child: TextField(
+              child: TvKeyboardTextField(
                 controller: _searchController,
                 style: const TextStyle(
                   color: Colors.white,
@@ -584,6 +585,7 @@ class _SeriesCard extends StatefulWidget {
 
 class _SeriesCardState extends State<_SeriesCard> {
   bool _isHovering = false;
+  bool _isFocused = false;
 
   @override
   Widget build(BuildContext context) {
@@ -591,6 +593,7 @@ class _SeriesCardState extends State<_SeriesCard> {
         defaultTargetPlatform == TargetPlatform.windows ||
         defaultTargetPlatform == TargetPlatform.macOS ||
         defaultTargetPlatform == TargetPlatform.linux;
+    final isActive = _isHovering || _isFocused;
 
     return MouseRegion(
       onEnter: (_) {
@@ -605,7 +608,7 @@ class _SeriesCardState extends State<_SeriesCard> {
       },
       child: AnimatedScale(
         duration: const Duration(milliseconds: 180),
-        scale: _isHovering ? 1.02 : 1,
+        scale: isActive ? 1.02 : 1,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 180),
           decoration: BoxDecoration(
@@ -616,11 +619,11 @@ class _SeriesCardState extends State<_SeriesCard> {
             ),
             borderRadius: BorderRadius.circular(10),
             border: Border.all(
-              color: _isHovering ? const Color(0xFF00C6FF).withValues(alpha: 0.6) : Colors.transparent,
+              color: isActive ? const Color(0xFF00C6FF).withValues(alpha: 0.6) : Colors.transparent,
               width: 1.2,
             ),
             boxShadow: [
-              if (_isHovering)
+              if (isActive)
                 BoxShadow(
                   color: const Color(0xFF00C6FF).withValues(alpha: 0.28),
                   blurRadius: 14,
@@ -633,6 +636,7 @@ class _SeriesCardState extends State<_SeriesCard> {
             child: Material(
               color: Colors.transparent,
               child: InkWell(
+                onFocusChange: (focused) => setState(() => _isFocused = focused),
                 onTap: widget.onTap,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -643,7 +647,7 @@ class _SeriesCardState extends State<_SeriesCard> {
                         children: [
                           ColorFiltered(
                             colorFilter: ColorFilter.mode(
-                              Colors.white.withValues(alpha: _isHovering ? 0.12 : 0),
+                              Colors.white.withValues(alpha: isActive ? 0.12 : 0),
                               BlendMode.screen,
                             ),
                             child: Image.network(
