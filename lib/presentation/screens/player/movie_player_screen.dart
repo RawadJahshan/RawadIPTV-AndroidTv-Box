@@ -92,15 +92,34 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
     });
   }
 
-  void _openControlsFromRemote() {
-    final isPlaying = _ctrl.playbackState.value.isPlaying;
+  void _focusIntoPlayerOverlay() {
+    if (!mounted) return;
 
-    if (isPlaying) {
-      _ctrl.pause();
-    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
 
+      final scope = FocusScope.of(context);
+      if (_playerFocusNode.hasPrimaryFocus || _playerFocusNode.hasFocus) {
+        scope.nextFocus();
+      }
+    });
+  }
+
+  void _openControlsFromRemote({bool focusOverlay = true}) {
     _markControlsVisibleHint();
     _simulateSurfaceTap();
+
+    if (focusOverlay) {
+      _focusIntoPlayerOverlay();
+    }
+  }
+
+  void _hideControlsFromRemote() {
+    _controlsLikelyVisible = false;
+    _simulateSurfaceTap();
+    if (mounted) {
+      _playerFocusNode.requestFocus();
+    }
   }
 
   void _simulateSurfaceTap() {
@@ -149,13 +168,17 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
       key == LogicalKeyboardKey.gameButtonA;
 
   KeyEventResult _handlePlayerKey(FocusNode node, KeyEvent event) {
-    if (event is! KeyDownEvent) return KeyEventResult.handled;
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
 
     final key = event.logicalKey;
 
     if (key == LogicalKeyboardKey.goBack ||
         key == LogicalKeyboardKey.escape ||
         key == LogicalKeyboardKey.browserBack) {
+      if (_controlsLikelyVisible) {
+        _hideControlsFromRemote();
+        return KeyEventResult.handled;
+      }
       return KeyEventResult.ignored;
     }
 
@@ -166,18 +189,21 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
     if (_isSelectKey(key)) {
       if (_controlsLikelyVisible) {
         _markControlsVisibleHint();
+        _focusIntoPlayerOverlay();
         return KeyEventResult.ignored;
       }
 
-      _openControlsFromRemote();
+      _openControlsFromRemote(focusOverlay: true);
       return KeyEventResult.handled;
     }
 
     if (key == LogicalKeyboardKey.arrowUp || key == LogicalKeyboardKey.arrowDown) {
       if (!_controlsLikelyVisible) {
-        _openControlsFromRemote();
+        _openControlsFromRemote(focusOverlay: true);
+        return KeyEventResult.handled;
       } else {
         _markControlsVisibleHint();
+        _focusIntoPlayerOverlay();
       }
       return KeyEventResult.ignored;
     }
@@ -185,11 +211,12 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
     if (key == LogicalKeyboardKey.arrowLeft || key == LogicalKeyboardKey.arrowRight) {
       if (_controlsLikelyVisible) {
         _markControlsVisibleHint();
+        _focusIntoPlayerOverlay();
         return KeyEventResult.ignored;
       }
 
       _seekFromRemote(key == LogicalKeyboardKey.arrowRight);
-      _openControlsFromRemote();
+      _openControlsFromRemote(focusOverlay: true);
       return KeyEventResult.handled;
     }
 
