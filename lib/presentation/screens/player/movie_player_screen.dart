@@ -41,6 +41,7 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
   bool _overlayVisible = false;
   int _focusedButtonIndex = 2; // 0=back10, 1=play/pause, 2=forward10
   bool _isOnTimeline = false;
+  static const int _timelineSeekSeconds = 60;
   Timer? _seekHoldTimer;
   Timer? _overlayHideTimer;
 
@@ -142,8 +143,8 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
 
     if (key == LogicalKeyboardKey.arrowLeft) {
       if (_isOnTimeline) {
-        // On timeline — seek left
-        _startSeekHold(-10);
+        // On timeline — seek left faster
+        _startSeekHold(-_timelineSeekSeconds);
       } else {
         setState(() {
           _focusedButtonIndex =
@@ -156,8 +157,8 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
 
     if (key == LogicalKeyboardKey.arrowRight) {
       if (_isOnTimeline) {
-        // On timeline — seek right
-        _startSeekHold(10);
+        // On timeline — seek right faster
+        _startSeekHold(_timelineSeekSeconds);
       } else {
         setState(() {
           _focusedButtonIndex =
@@ -255,10 +256,18 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
         _seek(10);
         break;
       case 3: // Subtitles - show subtitle selector
-        // TODO: implement subtitle dialog
+        _showTrackInfoDialog(
+          title: 'Subtitles',
+          message:
+              'Subtitle track selection is not available on this player build yet.',
+        );
         break;
       case 4: // Audio - show audio selector
-        // TODO: implement audio dialog
+        _showTrackInfoDialog(
+          title: 'Audio Track',
+          message:
+              'Audio track switching is not available on this player build yet.',
+        );
         break;
       case 5: // Timeline - already handled by arrows
         break;
@@ -412,7 +421,11 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
                             size: 28,
                           ),
                           onTap: () {
-                            // TODO: subtitle dialog
+                            _showTrackInfoDialog(
+                              title: 'Subtitles',
+                              message:
+                                  'Subtitle track selection is not available on this player build yet.',
+                            );
                           },
                         ),
                         const SizedBox(width: 16),
@@ -424,7 +437,11 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
                             size: 28,
                           ),
                           onTap: () {
-                            // TODO: audio dialog
+                            _showTrackInfoDialog(
+                              title: 'Audio Track',
+                              message:
+                                  'Audio track switching is not available on this player build yet.',
+                            );
                           },
                         ),
                       ],
@@ -473,6 +490,27 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
     final m = d.inMinutes.remainder(60).toString().padLeft(2, '0');
     final s = d.inSeconds.remainder(60).toString().padLeft(2, '0');
     return h > 0 ? '$h:$m:$s' : '${d.inMinutes}:$s';
+  }
+
+  Future<void> _showTrackInfoDialog({
+    required String title,
+    required String message,
+  }) async {
+    _resetOverlayTimer();
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1E1E2E),
+        title: Text(title, style: const TextStyle(color: Colors.white)),
+        content: Text(message, style: const TextStyle(color: Colors.white70)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
   }
 
   void _onError(String? error) {
