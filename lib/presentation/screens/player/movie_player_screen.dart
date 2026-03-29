@@ -434,7 +434,6 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
                 ),
               ),
             ],
-            ),
           ),
         ),
       ),
@@ -651,7 +650,6 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
                           ),
                         ],
                       ),
-                    ),
                 ),
               ),
 
@@ -764,7 +762,6 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
                   ),
                 ),
             ],
-            ),
           ),
         ),
       ),
