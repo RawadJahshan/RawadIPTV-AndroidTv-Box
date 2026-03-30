@@ -8,6 +8,7 @@ import '../../../data/datasources/remote/xtream_api.dart';
 import '../../../data/models/profile.dart';
 import '../../../data/models/user_info.dart';
 import '../../../data/services/profile_service.dart';
+import '../../widgets/tv_focusable.dart';
 import '../../widgets/tv_keyboard_text_field.dart';
 import '../home/home_dashboard.dart';
 import 'package:intl/intl.dart';
@@ -182,17 +183,10 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
                                   ),
                                 ),
                                 const SizedBox(height: 24),
-                                ElevatedButton.icon(
-                                  onPressed: _showAddProfileDialog,
-                                  icon: const Icon(Icons.add),
-                                  label: const Text('Add Profile'),
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: Colors.blue,
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 24,
-                                      vertical: 12,
-                                    ),
-                                  ),
+                                _TvFocusActionButton(
+                                  onTap: _showAddProfileDialog,
+                                  icon: Icons.add,
+                                  label: 'Add Profile',
                                 ),
                               ],
                             ),
@@ -210,38 +204,57 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
                             itemBuilder: (context, index) {
                               if (index == _profiles.length) {
                                 // Add new profile button
-                                return InkWell(
+                                return TvFocusable(
                                   onTap: _showAddProfileDialog,
                                   borderRadius: BorderRadius.circular(16),
-                                  child: Container(
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xFF2A2A3E),
-                                      borderRadius: BorderRadius.circular(16),
-                                      border: Border.all(
-                                        color: Colors.white12,
-                                        width: 2,
+                                  focusedScale: 1.03,
+                                  builder: (context, isActive) {
+                                    return AnimatedContainer(
+                                      duration: const Duration(milliseconds: 140),
+                                      decoration: BoxDecoration(
+                                        color: isActive
+                                            ? const Color(0xFF33405A)
+                                            : const Color(0xFF2A2A3E),
+                                        borderRadius: BorderRadius.circular(16),
+                                        border: Border.all(
+                                          color: isActive
+                                              ? const Color(0xFF00C6FF)
+                                              : Colors.white12,
+                                          width: isActive ? 2.6 : 2,
+                                        ),
+                                        boxShadow: isActive
+                                            ? [
+                                                BoxShadow(
+                                                  color: const Color(0xFF00C6FF)
+                                                      .withValues(alpha: 0.35),
+                                                  blurRadius: 16,
+                                                  spreadRadius: 1,
+                                                ),
+                                              ]
+                                            : null,
                                       ),
-                                    ),
-                                    child: const Column(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.center,
-                                      children: [
-                                        Icon(
-                                          Icons.add_circle_outline,
-                                          color: Colors.white38,
-                                          size: 48,
-                                        ),
-                                        SizedBox(height: 12),
-                                        Text(
-                                          'Add Profile',
-                                          style: TextStyle(
-                                            color: Colors.white38,
-                                            fontSize: 14,
+                                      child: const Column(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.center,
+                                        children: [
+                                          Icon(
+                                            Icons.add_circle_outline,
+                                            color: Colors.white,
+                                            size: 48,
                                           ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
+                                          SizedBox(height: 12),
+                                          Text(
+                                            'Add Profile',
+                                            style: TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 14,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    );
+                                  },
                                 );
                               }
 
@@ -273,6 +286,63 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
   }
 }
 
+
+class _TvFocusActionButton extends StatelessWidget {
+  final VoidCallback onTap;
+  final IconData icon;
+  final String label;
+
+  const _TvFocusActionButton({
+    required this.onTap,
+    required this.icon,
+    required this.label,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return TvFocusable(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      focusedScale: 1.03,
+      builder: (context, isActive) => AnimatedContainer(
+        duration: const Duration(milliseconds: 140),
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+        decoration: BoxDecoration(
+          color: isActive ? const Color(0xFF2F8DFF) : Colors.blue,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isActive ? const Color(0xFF00C6FF) : Colors.transparent,
+            width: isActive ? 2.4 : 1,
+          ),
+          boxShadow: isActive
+              ? [
+                  BoxShadow(
+                    color: const Color(0xFF00C6FF).withValues(alpha: 0.35),
+                    blurRadius: 14,
+                    spreadRadius: 1,
+                  ),
+                ]
+              : null,
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, color: Colors.white),
+            const SizedBox(width: 8),
+            Text(
+              label,
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _ProfileCard extends StatelessWidget {
   final Profile profile;
   final VoidCallback onTap;
@@ -286,14 +356,28 @@ class _ProfileCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
+    return TvFocusable(
       onTap: onTap,
       borderRadius: BorderRadius.circular(16),
-      child: Container(
+      focusedScale: 1.03,
+      builder: (context, isActive) => AnimatedContainer(
+        duration: const Duration(milliseconds: 140),
         decoration: BoxDecoration(
-          color: const Color(0xFF2A2A3E),
+          color: isActive ? const Color(0xFF33405A) : const Color(0xFF2A2A3E),
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: Colors.white12),
+          border: Border.all(
+            color: isActive ? const Color(0xFF00C6FF) : Colors.white12,
+            width: isActive ? 2.6 : 1.2,
+          ),
+          boxShadow: isActive
+              ? [
+                  BoxShadow(
+                    color: const Color(0xFF00C6FF).withValues(alpha: 0.35),
+                    blurRadius: 16,
+                    spreadRadius: 1,
+                  ),
+                ]
+              : null,
         ),
         child: Stack(
           children: [
@@ -588,12 +672,34 @@ class _AddProfileDialogState extends State<_AddProfileDialog> {
                 Expanded(
                   child: ElevatedButton(
                     onPressed: _isLoading ? null : _addProfile,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.blue,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
+                    style: ButtonStyle(
+                      padding: WidgetStateProperty.all(
+                        const EdgeInsets.symmetric(vertical: 14),
                       ),
+                      shape: WidgetStateProperty.all(
+                        RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      backgroundColor: WidgetStateProperty.resolveWith((states) {
+                        if (states.contains(WidgetState.disabled)) {
+                          return Colors.blue.withValues(alpha: 0.6);
+                        }
+                        if (states.contains(WidgetState.focused)) {
+                          return const Color(0xFF2F8DFF);
+                        }
+                        return Colors.blue;
+                      }),
+                      side: WidgetStateProperty.resolveWith((states) {
+                        if (states.contains(WidgetState.focused)) {
+                          return const BorderSide(color: Color(0xFF00C6FF), width: 2.4);
+                        }
+                        return const BorderSide(color: Colors.transparent, width: 1);
+                      }),
+                      elevation: WidgetStateProperty.resolveWith((states) {
+                        return states.contains(WidgetState.focused) ? 8 : 0;
+                      }),
+                      shadowColor: WidgetStateProperty.all(const Color(0xFF00C6FF)),
                     ),
                     child: _isLoading
                         ? const SizedBox(
