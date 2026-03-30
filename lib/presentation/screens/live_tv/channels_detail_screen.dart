@@ -29,8 +29,8 @@ enum _LiveTvFocusArea { channelList, playerPanel, retryPanel }
 class _ChannelsDetailScreenState extends State<ChannelsDetailScreen> {
   late Future<List<Channel>> _channelsFuture;
   int _selectedChannelIndex = 0;
-  late final Player _player;
-  late final VideoController _controller;
+  Player? _player;
+  VideoController? _controller;
   bool _isFavorite = false;
   bool _isBuffering = false;
   bool _hasError = false;
@@ -70,6 +70,7 @@ class _ChannelsDetailScreenState extends State<ChannelsDetailScreen> {
   Duration _lastPosition = Duration.zero;
   DateTime _lastProgressAt = DateTime.now();
   bool _isPlaying = false;
+  bool _didRecoverPlaybackPipeline = false;
 
   void _forceLandscape() {
     SystemChrome.setPreferredOrientations([
@@ -83,22 +84,7 @@ class _ChannelsDetailScreenState extends State<ChannelsDetailScreen> {
   void initState() {
     super.initState();
     _forceLandscape();
-
-    _player = Player(
-      configuration: const PlayerConfiguration(
-        bufferSize: 48 * 1024 * 1024,
-        logLevel: MPVLogLevel.warn,
-      ),
-    );
-
-    _controller = VideoController(
-      _player,
-      configuration: const VideoControllerConfiguration(
-        enableHardwareAcceleration: true,
-      ),
-    );
-
-    _setupListeners();
+    _initializePlaybackPipeline();
     _channelsFuture = _loadChannels();
   }
 
@@ -108,13 +94,32 @@ class _ChannelsDetailScreenState extends State<ChannelsDetailScreen> {
     _forceLandscape();
   }
 
-  void _setupListeners() {
-    _bufferingSubscription = _player.stream.buffering.listen((buffering) {
+  void _initializePlaybackPipeline() {
+    _clearPlayerSubscriptions();
+    _player?.dispose();
+
+    final player = Player(
+      configuration: const PlayerConfiguration(
+        bufferSize: 48 * 1024 * 1024,
+        logLevel: MPVLogLevel.warn,
+      ),
+    );
+    _player = player;
+
+    _controller = VideoController(
+      player,
+      configuration: const VideoControllerConfiguration(
+        enableHardwareAcceleration: true,
+        androidAttachSurfaceAfterVideoParameters: false,
+      ),
+    );
+
+    _bufferingSubscription = player.stream.buffering.listen((buffering) {
       if (!mounted) return;
       setState(() => _isBuffering = buffering && !_hasVideoFrame && !_hasError);
     });
 
-    _videoParamsSubscription = _player.stream.videoParams.listen((params) {
+    _videoParamsSubscription = player.stream.videoParams.listen((params) {
       if (!mounted || params.w == null || params.h == null) return;
       _fallbackTimer?.cancel();
       _retryTimer?.cancel();
@@ -129,7 +134,7 @@ class _ChannelsDetailScreenState extends State<ChannelsDetailScreen> {
       debugPrint('[LiveTV] video params ready: ${params.w}x${params.h}');
     });
 
-    _tracksSubscription = _player.stream.tracks.listen((tracks) {
+    _tracksSubscription = player.stream.tracks.listen((tracks) {
       if (!mounted || tracks.video.isEmpty) return;
       for (final track in tracks.video) {
         if (track.fps != null && track.fps! > 0) {
@@ -141,20 +146,20 @@ class _ChannelsDetailScreenState extends State<ChannelsDetailScreen> {
       }
     });
 
-    _errorSubscription = _player.stream.error.listen((error) {
+    _errorSubscription = player.stream.error.listen((error) {
       if (!mounted || error.isEmpty) return;
       debugPrint('Player error: $error');
       _handleError();
     });
 
-    _playingSubscription = _player.stream.playing.listen((playing) {
+    _playingSubscription = player.stream.playing.listen((playing) {
       _isPlaying = playing;
       debugPrint(
         '[LiveTV] state playing=$playing buffering=$_isBuffering hasVideo=$_hasVideoFrame',
       );
     });
 
-    _positionSubscription = _player.stream.position.listen((position) {
+    _positionSubscription = player.stream.position.listen((position) {
       if (position > _lastPosition) {
         _lastPosition = position;
         _lastProgressAt = DateTime.now();
@@ -169,6 +174,23 @@ class _ChannelsDetailScreenState extends State<ChannelsDetailScreen> {
         _handleError();
       }
     });
+  }
+
+  void _clearPlayerSubscriptions() {
+    _bufferingSubscription?.cancel();
+    _videoParamsSubscription?.cancel();
+    _tracksSubscription?.cancel();
+    _errorSubscription?.cancel();
+    _playingSubscription?.cancel();
+    _positionSubscription?.cancel();
+  }
+
+  Future<void> _recoverPlaybackPipeline(Channel channel) async {
+    if (_didRecoverPlaybackPipeline || !mounted) return;
+    _didRecoverPlaybackPipeline = true;
+    debugPrint('[LiveTV] recovering playback pipeline and retrying stream...');
+    _initializePlaybackPipeline();
+    await _playStream(channel);
   }
 
   void _showRetryError(String message) {
@@ -209,7 +231,13 @@ class _ChannelsDetailScreenState extends State<ChannelsDetailScreen> {
       return;
     }
 
-    _showRetryError('Stream unavailable');
+    _channelsFuture.then((channels) {
+      if (!mounted || channels.isEmpty) return;
+      _recoverPlaybackPipeline(channels[_selectedChannelIndex]).then((_) {
+        if (!mounted || _hasVideoFrame) return;
+        _showRetryError('Stream unavailable');
+      });
+    });
   }
 
   Future<List<Channel>> _loadChannels() async {
@@ -227,6 +255,8 @@ class _ChannelsDetailScreenState extends State<ChannelsDetailScreen> {
   }
 
   Future<void> _playStream(Channel channel) async {
+    final player = _player;
+    if (player == null) return;
     _fallbackTimer?.cancel();
     _retryTimer?.cancel();
     _usingM3u8 = false;
@@ -247,7 +277,7 @@ class _ChannelsDetailScreenState extends State<ChannelsDetailScreen> {
 
     debugPrint('[LiveTV] opening TS stream: ${channel.streamUrl}');
     try {
-      await _player.open(
+      await player.open(
         Media(channel.streamUrl, httpHeaders: _streamHttpHeaders),
         play: true,
       );
@@ -280,7 +310,9 @@ class _ChannelsDetailScreenState extends State<ChannelsDetailScreen> {
     });
 
     try {
-      await _player.open(
+      final player = _player;
+      if (player == null) return;
+      await player.open(
         Media(channel.streamUrlM3u8, httpHeaders: _streamHttpHeaders),
         play: true,
       );
@@ -323,6 +355,7 @@ class _ChannelsDetailScreenState extends State<ChannelsDetailScreen> {
       _resolution = '';
       _fps = '';
     });
+    _didRecoverPlaybackPipeline = false;
     await _playStream(channel);
     await _loadFavoriteStatus(channel.id.toString());
   }
@@ -330,6 +363,7 @@ class _ChannelsDetailScreenState extends State<ChannelsDetailScreen> {
   void _retryStream(List<Channel> channels) {
     _retryCount = 0;
     _usingM3u8 = false;
+    _didRecoverPlaybackPipeline = false;
     _fallbackTimer?.cancel();
     _retryTimer?.cancel();
     _playStream(channels[_selectedChannelIndex]);
@@ -449,12 +483,7 @@ class _ChannelsDetailScreenState extends State<ChannelsDetailScreen> {
     _fallbackTimer?.cancel();
     _retryTimer?.cancel();
     _watchdogTimer?.cancel();
-    _bufferingSubscription?.cancel();
-    _videoParamsSubscription?.cancel();
-    _tracksSubscription?.cancel();
-    _errorSubscription?.cancel();
-    _playingSubscription?.cancel();
-    _positionSubscription?.cancel();
+    _clearPlayerSubscriptions();
     for (final node in _channelItemFocusNodes) {
       node.dispose();
     }
@@ -464,7 +493,7 @@ class _ChannelsDetailScreenState extends State<ChannelsDetailScreen> {
     _backButtonFocusNode.dispose();
     _screenFocusScope.dispose();
     _channelScrollController.dispose();
-    _player.dispose();
+    _player?.dispose();
     super.dispose();
   }
 
@@ -733,31 +762,31 @@ class _ChannelsDetailScreenState extends State<ChannelsDetailScreen> {
                                     child: Stack(
                                       children: [
                                         SizedBox.expand(
-                                          child: RepaintBoundary(
-                                            child: Video(
-                                              controller: _controller,
-                                              fit: BoxFit.contain,
-                                              onEnterFullscreen: () async {
-                                                await SystemChrome.setEnabledSystemUIMode(
-                                                  SystemUiMode.immersiveSticky,
-                                                );
-                                                await SystemChrome.setPreferredOrientations([
-                                                  DeviceOrientation.landscapeLeft,
-                                                  DeviceOrientation.landscapeRight,
-                                                ]);
-                                              },
-                                              onExitFullscreen: () async {
-                                                await SystemChrome.setEnabledSystemUIMode(
-                                                  SystemUiMode.manual,
-                                                  overlays: SystemUiOverlay.values,
-                                                );
-                                                await SystemChrome.setPreferredOrientations([
-                                                  DeviceOrientation.landscapeLeft,
-                                                  DeviceOrientation.landscapeRight,
-                                                ]);
-                                              },
-                                            ),
-                                          ),
+                                          child: _controller == null
+                                              ? const SizedBox.shrink()
+                                              : Video(
+                                                  controller: _controller!,
+                                                  fit: BoxFit.contain,
+                                                  onEnterFullscreen: () async {
+                                                    await SystemChrome.setEnabledSystemUIMode(
+                                                      SystemUiMode.immersiveSticky,
+                                                    );
+                                                    await SystemChrome.setPreferredOrientations([
+                                                      DeviceOrientation.landscapeLeft,
+                                                      DeviceOrientation.landscapeRight,
+                                                    ]);
+                                                  },
+                                                  onExitFullscreen: () async {
+                                                    await SystemChrome.setEnabledSystemUIMode(
+                                                      SystemUiMode.manual,
+                                                      overlays: SystemUiOverlay.values,
+                                                    );
+                                                    await SystemChrome.setPreferredOrientations([
+                                                      DeviceOrientation.landscapeLeft,
+                                                      DeviceOrientation.landscapeRight,
+                                                    ]);
+                                                  },
+                                                ),
                                         ),
                                         if (_isBuffering && !_hasError)
                                           Container(
