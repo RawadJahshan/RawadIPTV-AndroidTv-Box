@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:media_kit/media_kit.dart';
@@ -36,6 +37,8 @@ class _ChannelsDetailScreenState extends State<ChannelsDetailScreen> {
   String _errorMessage = '';
   bool _usingM3u8 = false;
   int _retryCount = 0;
+  bool _didStartInitialPlayback = false;
+  bool _hasVideoFrame = false;
   static const int _maxRetries = 3;
   static const Map<String, String> _streamHttpHeaders = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
@@ -73,8 +76,10 @@ class _ChannelsDetailScreenState extends State<ChannelsDetailScreen> {
 
     _controller = VideoController(
       _player,
-      configuration: const VideoControllerConfiguration(
+      configuration: VideoControllerConfiguration(
         enableHardwareAcceleration: true,
+        androidAttachSurfaceAfterVideoParameters:
+            defaultTargetPlatform == TargetPlatform.android,
       ),
     );
 
@@ -91,7 +96,9 @@ class _ChannelsDetailScreenState extends State<ChannelsDetailScreen> {
   void _setupListeners() {
     _bufferingSubscription =
         _player.stream.buffering.listen((buffering) {
-      if (mounted) setState(() => _isBuffering = buffering);
+      if (mounted) {
+        setState(() => _isBuffering = buffering && !_hasVideoFrame);
+      }
     });
 
     _videoParamsSubscription =
@@ -100,11 +107,15 @@ class _ChannelsDetailScreenState extends State<ChannelsDetailScreen> {
         _fallbackTimer?.cancel();
         _retryTimer?.cancel();
         setState(() {
+          _hasVideoFrame = true;
           _resolution = '${params.w}x${params.h}';
           _hasError = false;
           _isBuffering = false;
           _retryCount = 0;
         });
+        debugPrint(
+          '[LiveTV] video params ready: ${params.w}x${params.h}',
+        );
       }
     });
 
@@ -128,6 +139,13 @@ class _ChannelsDetailScreenState extends State<ChannelsDetailScreen> {
         debugPrint('Player error: $error');
         _handleError();
       }
+    });
+
+    _player.stream.playing.listen((playing) {
+      debugPrint(
+        '[LiveTV] state playing=$playing buffering=$_isBuffering '
+        'hasVideo=$_hasVideoFrame',
+      );
     });
   }
 
@@ -176,11 +194,6 @@ class _ChannelsDetailScreenState extends State<ChannelsDetailScreen> {
             ))
         .toList();
 
-    if (channels.isNotEmpty) {
-      await _playStream(channels[0]);
-      await _loadFavoriteStatus(channels[0].id.toString());
-    }
-
     return channels;
   }
 
@@ -197,9 +210,11 @@ class _ChannelsDetailScreenState extends State<ChannelsDetailScreen> {
         _resolution = '';
         _fps = '';
         _errorMessage = '';
+        _hasVideoFrame = false;
       });
     }
 
+    debugPrint('[LiveTV] opening TS stream: ${channel.streamUrl}');
     try {
       await _player.open(
         Media(
@@ -210,7 +225,7 @@ class _ChannelsDetailScreenState extends State<ChannelsDetailScreen> {
       );
 
       _fallbackTimer = Timer(const Duration(seconds: 8), () {
-        if (mounted && _resolution.isEmpty && !_hasError) {
+        if (mounted && !_hasVideoFrame && !_hasError) {
           debugPrint('No video after 8s, trying m3u8...');
           _tryM3u8Fallback(channel);
         }
@@ -233,6 +248,7 @@ class _ChannelsDetailScreenState extends State<ChannelsDetailScreen> {
         _isBuffering = true;
         _hasError = false;
         _resolution = '';
+        _hasVideoFrame = false;
       });
     }
 
@@ -246,7 +262,7 @@ class _ChannelsDetailScreenState extends State<ChannelsDetailScreen> {
       );
 
       _fallbackTimer = Timer(const Duration(seconds: 8), () {
-        if (mounted && _resolution.isEmpty) {
+        if (mounted && !_hasVideoFrame) {
           setState(() {
             _hasError = true;
             _errorMessage = 'Stream unavailable';
@@ -299,6 +315,17 @@ class _ChannelsDetailScreenState extends State<ChannelsDetailScreen> {
     _fallbackTimer?.cancel();
     _retryTimer?.cancel();
     _playStream(channels[_selectedChannelIndex]);
+  }
+
+  Future<void> _startInitialPlaybackIfNeeded(
+    List<Channel> channels,
+  ) async {
+    if (_didStartInitialPlayback || channels.isEmpty || !mounted) return;
+    _didStartInitialPlayback = true;
+    final initial = channels[_selectedChannelIndex];
+    debugPrint('[LiveTV] initial playback: ${initial.name}');
+    await _playStream(initial);
+    await _loadFavoriteStatus(initial.id.toString());
   }
 
   @override
@@ -354,6 +381,9 @@ class _ChannelsDetailScreenState extends State<ChannelsDetailScreen> {
 
             final channels = snapshot.data!;
             final selectedChannel = channels[_selectedChannelIndex];
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              unawaited(_startInitialPlaybackIfNeeded(channels));
+            });
 
             return Row(
               children: [
@@ -525,7 +555,7 @@ class _ChannelsDetailScreenState extends State<ChannelsDetailScreen> {
                             // Buffering overlay
                             if (_isBuffering && !_hasError)
                               Container(
-                                color: Colors.black87,
+                                color: Colors.black45,
                                 child: Center(
                                   child: Column(
                                     mainAxisAlignment:
