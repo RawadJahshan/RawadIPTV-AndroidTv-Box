@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:media_kit/media_kit.dart';
@@ -94,10 +93,8 @@ class _ChannelsDetailScreenState extends State<ChannelsDetailScreen> {
 
     _controller = VideoController(
       _player,
-      configuration: VideoControllerConfiguration(
+      configuration: const VideoControllerConfiguration(
         enableHardwareAcceleration: true,
-        androidAttachSurfaceAfterVideoParameters:
-            defaultTargetPlatform == TargetPlatform.android,
       ),
     );
 
