@@ -6,8 +6,10 @@ import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../../data/datasources/remote/xtream_api.dart';
 import '../../../data/models/user_info.dart';
+import '../../../data/models/profile.dart';
+import '../../../data/services/profile_service.dart';
+import '../profiles/playlist_import_screen.dart';
 import '../../widgets/tv_keyboard_text_field.dart';
-import '../home/home_dashboard.dart';
 import 'package:intl/intl.dart';
 
 
@@ -106,16 +108,26 @@ class _LoginScreenState extends State<LoginScreen> {
         password: password,
       );
 
-      if (!mounted) return;
+      final profile = Profile(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        name: username,
+        serverUrl: AppConstants.serverUrl,
+        username: username,
+        password: password,
+        expiryDate: formatUnixTimestamp(userInfo.expDate),
+        avatarLetter: username[0].toUpperCase(),
+      );
+      await ProfileService.saveProfile(profile);
+      await ProfileService.setActiveProfile(profile.id);
 
-      // Navigate to HomeDashboard and pass all required info
+      if (!mounted) return;
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
-          builder: (context) => HomeDashboard(
-            username: userInfo.username,
-            expiryDate: formatUnixTimestamp(userInfo.expDate),
+          builder: (context) => PlaylistImportScreen(
             xtreamApi: xtreamApi,
+            profile: profile,
+            mode: PlaylistImportMode.initialAdd,
           ),
         ),
       );

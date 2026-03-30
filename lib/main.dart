@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:media_kit/media_kit.dart';
 import 'data/datasources/remote/xtream_api.dart';
+import 'data/services/profile_service.dart';
 import 'presentation/screens/profiles/profiles_screen.dart';
 import 'presentation/screens/favorites/favorites_screen.dart';
 import 'presentation/screens/series/series_categories_screen.dart';
@@ -73,7 +74,16 @@ class MyApp extends StatelessWidget {
         if (settings.name == '/series') {
           final xtreamApi = settings.arguments as XtreamApi;
           return MaterialPageRoute(
-            builder: (_) => SeriesCategoriesScreen(xtreamApi: xtreamApi),
+            builder: (_) => FutureBuilder(
+              future: ProfileService.getActiveProfile(),
+              builder: (context, snapshot) {
+                final profileId = snapshot.data?.id ?? '';
+                return SeriesCategoriesScreen(
+                  xtreamApi: xtreamApi,
+                  profileId: profileId,
+                );
+              },
+            ),
           );
         }
         return null;

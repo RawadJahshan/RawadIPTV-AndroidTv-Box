@@ -3,13 +3,15 @@ import 'package:flutter/services.dart';
 
 import '../../../data/datasources/remote/xtream_api.dart';
 import '../../../data/models/movie_category.dart';
+import '../../../data/services/catalog_cache_service.dart';
 import 'movie_list_screen.dart';
 import '../../widgets/tv_keyboard_text_field.dart';
 
 class MoviesScreen extends StatefulWidget {
   final XtreamApi xtreamApi;
+  final String profileId;
 
-  const MoviesScreen({super.key, required this.xtreamApi});
+  const MoviesScreen({super.key, required this.xtreamApi, required this.profileId});
 
   @override
   State<MoviesScreen> createState() => _MoviesScreenState();
@@ -37,7 +39,11 @@ class _MoviesScreenState extends State<MoviesScreen> {
   }
 
   Future<List<MovieCategory>> _fetchCategories() async {
-    final raw = await widget.xtreamApi.getVodCategories();
+    var raw = await CatalogCacheService.getVodCategories(widget.profileId);
+    if (raw.isEmpty) {
+      raw = await widget.xtreamApi.getVodCategories();
+      await CatalogCacheService.saveVodCategories(widget.profileId, raw);
+    }
     return raw.map((json) => MovieCategory.fromJson(json)).toList();
   }
 
@@ -206,6 +212,7 @@ class _MoviesScreenState extends State<MoviesScreen> {
           MaterialPageRoute(
             builder: (_) => MovieListScreen(
               xtreamApi: widget.xtreamApi,
+              profileId: widget.profileId,
               categoryId: category.id,
               categoryName: category.name,
             ),

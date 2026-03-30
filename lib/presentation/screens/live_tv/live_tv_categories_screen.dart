@@ -1,13 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../../data/datasources/remote/xtream_api.dart';
+import '../../../data/services/catalog_cache_service.dart';
 import '../../../data/models/live_tv_category.dart';
 import 'channels_detail_screen.dart';
 import '../../widgets/tv_keyboard_text_field.dart';
 
 class LiveTvCategoriesScreen extends StatefulWidget {
   final XtreamApi xtreamApi;
-  const LiveTvCategoriesScreen({super.key, required this.xtreamApi});
+  final String profileId;
+  const LiveTvCategoriesScreen({
+    super.key,
+    required this.xtreamApi,
+    required this.profileId,
+  });
 
   @override
   State<LiveTvCategoriesScreen> createState() =>
@@ -31,7 +37,11 @@ class _LiveTvCategoriesScreenState
   }
 
   Future<List<LiveTvCategory>> _fetchCategories() async {
-    final raw = await widget.xtreamApi.getLiveCategories();
+    var raw = await CatalogCacheService.getLiveCategories(widget.profileId);
+    if (raw.isEmpty) {
+      raw = await widget.xtreamApi.getLiveCategories();
+      await CatalogCacheService.saveLiveCategories(widget.profileId, raw);
+    }
     return raw
         .map((json) => LiveTvCategory.fromJson(json))
         .toList();
@@ -241,6 +251,7 @@ class _LiveTvCategoriesScreenState
           MaterialPageRoute(
             builder: (_) => ChannelsDetailScreen(
               xtreamApi: widget.xtreamApi,
+              profileId: widget.profileId,
               category: category,
             ),
           ),

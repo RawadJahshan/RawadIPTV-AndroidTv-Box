@@ -130,6 +130,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
               MaterialPageRoute(
                 builder: (_) => ChannelsDetailScreen(
                   xtreamApi: widget.xtreamApi,
+                  profileId: '',
                   category: LiveTvCategory(id: channel.id, name: channel.name),
                 ),
               ),

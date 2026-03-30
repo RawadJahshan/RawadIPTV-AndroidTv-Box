@@ -6,19 +6,23 @@ import '../live_tv/live_tv_categories_screen.dart';
 import '../movies/movies_screen.dart';
 import '../series/series_categories_screen.dart';
 import '../../../data/datasources/remote/xtream_api.dart';
+import '../../../data/services/profile_service.dart';
 import '../profiles/profiles_screen.dart';
+import '../profiles/playlist_import_screen.dart';
 import '../settings/settings_screen.dart';
 
 class HomeDashboard extends StatefulWidget {
   final String username;
   final String expiryDate;
   final XtreamApi xtreamApi;
+  final String profileId;
 
   const HomeDashboard({
     super.key,
     required this.username,
     required this.expiryDate,
     required this.xtreamApi,
+    required this.profileId,
   });
 
   @override
@@ -117,6 +121,34 @@ class _HomeDashboardState extends State<HomeDashboard> {
                     ),
                   ),
                   const Spacer(),
+                  ElevatedButton.icon(
+                    onPressed: () async {
+                      final profile = await ProfileService.getActiveProfile();
+                      if (!mounted || profile == null) {
+                        return;
+                      }
+                      await Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => PlaylistImportScreen(
+                            xtreamApi: widget.xtreamApi,
+                            profile: profile,
+                            mode: PlaylistImportMode.refresh,
+                          ),
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.refresh, size: 18),
+                    label: const Text('Refresh Playlist'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF1A1A2E),
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
                   Row(
                     children: [
                       const _DateTimeWidget(),
@@ -149,6 +181,7 @@ class _HomeDashboardState extends State<HomeDashboard> {
                           MaterialPageRoute(
                             builder: (_) => LiveTvCategoriesScreen(
                               xtreamApi: widget.xtreamApi,
+                              profileId: widget.profileId,
                             ),
                           ),
                         );
@@ -164,6 +197,7 @@ class _HomeDashboardState extends State<HomeDashboard> {
                           MaterialPageRoute(
                             builder: (_) => MoviesScreen(
                               xtreamApi: widget.xtreamApi,
+                              profileId: widget.profileId,
                             ),
                           ),
                         );
@@ -179,6 +213,7 @@ class _HomeDashboardState extends State<HomeDashboard> {
                           MaterialPageRoute(
                             builder: (_) => SeriesCategoriesScreen(
                               xtreamApi: widget.xtreamApi,
+                              profileId: widget.profileId,
                             ),
                           ),
                         );

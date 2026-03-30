@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 
 import '../../../data/datasources/remote/xtream_api.dart';
 import '../../../data/models/movie_item.dart';
+import '../../../data/services/catalog_cache_service.dart';
 import '../../../data/services/favorites_service.dart';
 import '../../../data/services/watch_progress_service.dart';
 import 'movie_detail_screen.dart';
@@ -11,12 +12,14 @@ import '../../widgets/tv_keyboard_text_field.dart';
 
 class MovieListScreen extends StatefulWidget {
   final XtreamApi xtreamApi;
+  final String profileId;
   final int categoryId;
   final String categoryName;
 
   const MovieListScreen({
     super.key,
     required this.xtreamApi,
+    required this.profileId,
     required this.categoryId,
     required this.categoryName,
   });
@@ -137,11 +140,18 @@ class _MovieListScreenState extends State<MovieListScreen> {
     try {
       final List<Map<String, dynamic>> rawStreams;
       if (widget.categoryId == -1) {
-        rawStreams = await widget.xtreamApi.getVodStreamsStrict();
+        final cached = await CatalogCacheService.getVodStreams(widget.profileId);
+        rawStreams = cached.isNotEmpty ? cached : await widget.xtreamApi.getVodStreamsStrict();
       } else {
-        rawStreams = await widget.xtreamApi.getVodStreamsStrict(
+        final cached = await CatalogCacheService.getVodStreams(
+          widget.profileId,
           categoryId: widget.categoryId,
         );
+        rawStreams = cached.isNotEmpty
+            ? cached
+            : await widget.xtreamApi.getVodStreamsStrict(
+                categoryId: widget.categoryId,
+              );
       }
 
       final movies = rawStreams.map((json) => MovieItem.fromJson(json)).toList();
