@@ -9,6 +9,7 @@ import '../../../data/datasources/remote/xtream_api.dart';
 import '../../../data/services/favorites_service.dart';
 import '../../../data/services/watch_progress_service.dart';
 import '../player/movie_player_screen.dart';
+import '../../widgets/tv_focusable.dart';
 
 class SeriesDetailScreen extends StatefulWidget {
   final XtreamApi xtreamApi;
@@ -552,14 +553,28 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
             final progress = snapshot.data;
             final hasProgress = progress != null;
 
-            return InkWell(
+            return TvFocusable(
               onTap: () => _playEpisode(episode, _selectedSeason),
               borderRadius: BorderRadius.circular(12),
-              child: Container(
+              focusedScale: 1.015,
+              builder: (context, isActive) => AnimatedContainer(
+                duration: const Duration(milliseconds: 140),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF1A1A2E),
+                  color: isActive ? const Color(0xFF233247) : const Color(0xFF1A1A2E),
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.white10),
+                  border: Border.all(
+                    color: isActive ? const Color(0xFF00C6FF) : Colors.white10,
+                    width: isActive ? 2.2 : 1,
+                  ),
+                  boxShadow: isActive
+                      ? [
+                          BoxShadow(
+                            color: const Color(0xFF00C6FF).withValues(alpha: 0.28),
+                            blurRadius: 14,
+                            spreadRadius: 1,
+                          ),
+                        ]
+                      : null,
                 ),
                 child: Column(
                   children: [
@@ -601,6 +616,7 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
                             ),
                           ),
                           IconButton(
+                            canRequestFocus: false,
                             onPressed: () => _playEpisode(episode, _selectedSeason),
                             icon: const Icon(Icons.play_circle, color: Colors.white, size: 30),
                           ),
