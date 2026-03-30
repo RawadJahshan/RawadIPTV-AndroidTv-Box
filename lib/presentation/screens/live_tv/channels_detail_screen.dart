@@ -41,6 +41,7 @@ class _ChannelsDetailScreenState extends State<ChannelsDetailScreen> {
   int _retryCount = 0;
   bool _didStartInitialPlayback = false;
   bool _hasVideoFrame = false;
+  bool _isFullscreen = false;
   static const int _maxRetries = 3;
   static const Map<String, String> _streamHttpHeaders = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
@@ -426,19 +427,46 @@ class _ChannelsDetailScreenState extends State<ChannelsDetailScreen> {
     });
   }
 
+  void _enterFullscreenMode() {
+    if (_isFullscreen || !mounted) return;
+    setState(() => _isFullscreen = true);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _requestPlayerPanelFocus();
+    });
+  }
+
+  void _exitFullscreenMode() {
+    if (!_isFullscreen || !mounted) return;
+    setState(() => _isFullscreen = false);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _requestPlayerPanelFocus();
+    });
+  }
+
   KeyEventResult _onScreenKeyEvent(FocusNode node, KeyEvent event) {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
     if (_hasError) return KeyEventResult.ignored;
 
     if (event.logicalKey == LogicalKeyboardKey.arrowRight &&
+        !_isFullscreen &&
         _channelItemFocusNodes.any((n) => n.hasFocus)) {
       _requestPlayerPanelFocus();
       return KeyEventResult.handled;
     }
 
     if (event.logicalKey == LogicalKeyboardKey.arrowLeft &&
+        !_isFullscreen &&
         (_playerPanelFocusNode.hasFocus || _favoriteButtonFocusNode.hasFocus)) {
       _requestChannelFocus(_selectedChannelIndex);
+      return KeyEventResult.handled;
+    }
+
+    if (_isFullscreen &&
+        (event.logicalKey == LogicalKeyboardKey.escape ||
+            event.logicalKey == LogicalKeyboardKey.goBack)) {
+      _exitFullscreenMode();
       return KeyEventResult.handled;
     }
 
@@ -503,16 +531,22 @@ class _ChannelsDetailScreenState extends State<ChannelsDetailScreen> {
 
     return WillPopScope(
       onWillPop: () async {
+        if (_isFullscreen) {
+          _exitFullscreenMode();
+          return false;
+        }
         _forceLandscape();
         return true;
       },
       child: Scaffold(
         backgroundColor: const Color(0xFF1E1E1E),
-        appBar: AppBar(
-          title: Text(widget.category.name),
-          backgroundColor: const Color(0xFF0F0F1A),
-          elevation: 0,
-        ),
+        appBar: _isFullscreen
+            ? null
+            : AppBar(
+                title: Text(widget.category.name),
+                backgroundColor: const Color(0xFF0F0F1A),
+                elevation: 0,
+              ),
         body: FutureBuilder<List<Channel>>(
           future: _channelsFuture,
           builder: (context, snapshot) {
@@ -545,7 +579,11 @@ class _ChannelsDetailScreenState extends State<ChannelsDetailScreen> {
                   !_channelItemFocusNodes.any((n) => n.hasFocus) &&
                   !_playerPanelFocusNode.hasFocus &&
                   !_favoriteButtonFocusNode.hasFocus) {
-                _requestChannelFocus(_selectedChannelIndex);
+                if (_isFullscreen) {
+                  _requestPlayerPanelFocus();
+                } else {
+                  _requestChannelFocus(_selectedChannelIndex);
+                }
               }
             });
 
@@ -557,11 +595,12 @@ class _ChannelsDetailScreenState extends State<ChannelsDetailScreen> {
                   onKeyEvent: _onScreenKeyEvent,
                   child: Row(
                     children: [
-                      Container(
-                        width: size.width * 0.32,
-                        color: const Color(0xFF0F0F1A),
-                        child: Column(
-                          children: [
+                      if (!_isFullscreen)
+                        Container(
+                          width: size.width * 0.32,
+                          color: const Color(0xFF0F0F1A),
+                          child: Column(
+                            children: [
                             Container(
                               padding: const EdgeInsets.symmetric(
                                 horizontal: 16,
@@ -714,9 +753,9 @@ class _ChannelsDetailScreenState extends State<ChannelsDetailScreen> {
                                 },
                               ),
                             ),
-                          ],
+                            ],
+                          ),
                         ),
-                      ),
                       Expanded(
                         child: Column(
                           children: [
@@ -731,16 +770,18 @@ class _ChannelsDetailScreenState extends State<ChannelsDetailScreen> {
                               onKeyEvent: (_, event) {
                                 if (event is! KeyDownEvent) return KeyEventResult.ignored;
                                 if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+                                  if (_isFullscreen) return KeyEventResult.handled;
                                   _requestChannelFocus(_selectedChannelIndex);
                                   return KeyEventResult.handled;
                                 }
                                 if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+                                  if (_isFullscreen) return KeyEventResult.handled;
                                   _favoriteButtonFocusNode.requestFocus();
                                   return KeyEventResult.handled;
                                 }
                                 if (event.logicalKey == LogicalKeyboardKey.select ||
                                     event.logicalKey == LogicalKeyboardKey.enter) {
-                                  _retryStream(channels);
+                                  _enterFullscreenMode();
                                   return KeyEventResult.handled;
                                 }
                                 return KeyEventResult.ignored;
@@ -748,19 +789,23 @@ class _ChannelsDetailScreenState extends State<ChannelsDetailScreen> {
                               child: Builder(
                                 builder: (context) {
                                   final playerFocused = Focus.of(context).hasFocus;
-                                  return Container(
-                                    height: (size.height - kToolbarHeight) * 0.62,
-                                    decoration: BoxDecoration(
-                                      color: Colors.black,
-                                      border: Border.all(
-                                        color: playerFocused
-                                            ? const Color(0xFF00C2FF)
-                                            : Colors.transparent,
-                                        width: 3,
+                                  return GestureDetector(
+                                    onTap: _enterFullscreenMode,
+                                    child: Container(
+                                      height: _isFullscreen
+                                          ? double.infinity
+                                          : (size.height - kToolbarHeight) * 0.62,
+                                      decoration: BoxDecoration(
+                                        color: Colors.black,
+                                        border: Border.all(
+                                          color: playerFocused
+                                              ? const Color(0xFF00C2FF)
+                                              : Colors.transparent,
+                                          width: 3,
+                                        ),
                                       ),
-                                    ),
-                                    child: Stack(
-                                      children: [
+                                      child: Stack(
+                                        children: [
                                         SizedBox.expand(
                                           child: _controller == null
                                               ? const SizedBox.shrink()
@@ -867,19 +912,21 @@ class _ChannelsDetailScreenState extends State<ChannelsDetailScreen> {
                                           ),
                                         if (_hasError)
                                           _buildRetryOverlay(channels),
-                                      ],
+                                        ],
+                                      ),
                                     ),
                                   );
                                 },
                               ),
                             ),
-                            Expanded(
-                              child: Container(
-                                color: const Color(0xFF1E1E1E),
-                                padding: const EdgeInsets.all(16),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
+                            if (!_isFullscreen)
+                              Expanded(
+                                child: Container(
+                                  color: const Color(0xFF1E1E1E),
+                                  padding: const EdgeInsets.all(16),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
                                     Row(
                                       children: [
                                         if (selectedChannel.logoUrl.isNotEmpty)
@@ -1021,10 +1068,10 @@ class _ChannelsDetailScreenState extends State<ChannelsDetailScreen> {
                                         },
                                       ),
                                     ),
-                                  ],
+                                    ],
+                                  ),
                                 ),
                               ),
-                            ),
                           ],
                         ),
                       ),
