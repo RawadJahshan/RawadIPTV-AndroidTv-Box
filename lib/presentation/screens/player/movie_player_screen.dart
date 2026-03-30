@@ -46,6 +46,7 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
   final FocusNode _subtitleFocusNode = FocusNode(debugLabel: 'tv_subtitles');
   final FocusNode _audioFocusNode = FocusNode(debugLabel: 'tv_audio');
   final FocusNode _qualityFocusNode = FocusNode(debugLabel: 'tv_quality');
+  final FocusNode _aspectRatioFocusNode = FocusNode(debugLabel: 'tv_aspect_ratio');
 
   Timer? _progressTimer;
   Timer? _tvOverlayHideTimer;
@@ -64,6 +65,7 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
   Duration _position = Duration.zero;
   Duration _duration = Duration.zero;
   DateTime? _lastProgressSaveAt;
+  _AspectRatioMode _aspectRatioMode = _AspectRatioMode.auto;
 
   bool get _isSeriesPlayback => widget.seriesId != null;
   bool get _isAndroidPlatform => defaultTargetPlatform == TargetPlatform.android;
@@ -458,6 +460,38 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
     }
   }
 
+  Future<void> _openAspectRatioMenu() async {
+    _resetTvOverlayInactivityTimer();
+    if (!mounted) return;
+
+    final selected = await showDialog<_AspectRatioMode>(
+      context: context,
+      barrierColor: Colors.black54,
+      builder: (context) {
+        return _TvTrackDialog<_AspectRatioMode>(
+          title: 'Aspect Ratio',
+          selectedValue: _aspectRatioMode,
+          items: const [
+            _TvDialogItem<_AspectRatioMode>(value: _AspectRatioMode.auto, title: 'Auto'),
+            _TvDialogItem<_AspectRatioMode>(value: _AspectRatioMode.fill, title: 'Fill'),
+            _TvDialogItem<_AspectRatioMode>(value: _AspectRatioMode.ratio16x9, title: '16:9'),
+            _TvDialogItem<_AspectRatioMode>(value: _AspectRatioMode.ratio4x3, title: '4:3'),
+          ],
+        );
+      },
+    );
+
+    if (selected != null && selected != _aspectRatioMode && mounted) {
+      setState(() {
+        _aspectRatioMode = selected;
+      });
+    }
+
+    if (mounted) {
+      _aspectRatioFocusNode.requestFocus();
+    }
+  }
+
   String _formatDuration(Duration duration) {
     final totalSeconds = duration.inSeconds;
     final hours = totalSeconds ~/ 3600;
@@ -497,6 +531,33 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
     return KeyEventResult.ignored;
   }
 
+  Widget _buildTvVideoSurface() {
+    final boxFit = _aspectRatioMode == _AspectRatioMode.fill ? BoxFit.cover : BoxFit.contain;
+
+    if (_aspectRatioMode == _AspectRatioMode.ratio16x9 ||
+        _aspectRatioMode == _AspectRatioMode.ratio4x3) {
+      final forcedAspect = _aspectRatioMode == _AspectRatioMode.ratio16x9 ? (16 / 9) : (4 / 3);
+      return Positioned.fill(
+        child: Center(
+          child: AspectRatio(
+            aspectRatio: forcedAspect,
+            child: ThaNativePlayerView(
+              controller: _ctrl,
+              boxFit: boxFit,
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Positioned.fill(
+      child: ThaNativePlayerView(
+        controller: _ctrl,
+        boxFit: boxFit,
+      ),
+    );
+  }
+
   Widget _buildTvPlayer() {
     final currentPosition = _pendingSeekPosition ?? _position;
     final progress = _duration.inMilliseconds > 0
@@ -510,12 +571,7 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
         onKeyEvent: _onTvRootKeyEvent,
         child: Stack(
           children: [
-            Positioned.fill(
-              child: ThaNativePlayerView(
-                controller: _ctrl,
-                boxFit: BoxFit.contain,
-              ),
-            ),
+            _buildTvVideoSurface(),
             Positioned(
               top: 0,
               left: 0,
@@ -612,6 +668,14 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
                                 onPressed: _openQualityMenu,
                                 onFocused: _resetTvOverlayInactivityTimer,
                               ),
+                              const SizedBox(width: 12),
+                              _TvControlButton(
+                                focusNode: _aspectRatioFocusNode,
+                                icon: Icons.aspect_ratio,
+                                label: 'Aspect Ratio',
+                                onPressed: _openAspectRatioMenu,
+                                onFocused: _resetTvOverlayInactivityTimer,
+                              ),
                             ],
                           ),
                         ],
@@ -694,6 +758,7 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
     _subtitleFocusNode.dispose();
     _audioFocusNode.dispose();
     _qualityFocusNode.dispose();
+    _aspectRatioFocusNode.dispose();
     try {
       _ctrl.playbackState.removeListener(_syncPlaybackState);
       _ctrl.dispose();
@@ -826,6 +891,13 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
       ),
     );
   }
+}
+
+enum _AspectRatioMode {
+  auto,
+  fill,
+  ratio16x9,
+  ratio4x3,
 }
 
 class _TvControlButton extends StatefulWidget {
