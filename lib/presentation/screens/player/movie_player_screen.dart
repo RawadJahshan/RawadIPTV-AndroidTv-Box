@@ -37,12 +37,16 @@ class MoviePlayerScreen extends StatefulWidget {
 
 class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
   static const Duration _controlsHintDuration = Duration(seconds: 8);
-  static const Duration _remoteAutoHideDuration = Duration(seconds: 3);
+  static const Duration _remoteAutoHideDuration = Duration(seconds: 8);
   static const Duration _tvSeekStep = Duration(seconds: 10);
 
   late ThaNativePlayerController _ctrl;
   final GlobalKey _playerSurfaceKey = GlobalKey(debugLabel: 'movie_player_surface');
-  final FocusNode _playerFocusNode = FocusNode(debugLabel: 'movie_player_focus');
+  final FocusNode _playerFocusNode = FocusNode(debugLabel: 'movie_player_focus_root');
+  final FocusNode _playPauseFocusNode = FocusNode(debugLabel: 'movie_player_play_pause');
+  final FocusNode _timelineFocusNode = FocusNode(debugLabel: 'movie_player_timeline');
+  final FocusNode _rewindFocusNode = FocusNode(debugLabel: 'movie_player_rewind');
+  final FocusNode _forwardFocusNode = FocusNode(debugLabel: 'movie_player_forward');
   final FocusScopeNode _playerScopeNode = FocusScopeNode(
     debugLabel: 'movie_player_scope',
   );
@@ -59,6 +63,14 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
   Duration _duration = Duration.zero;
   DateTime? _lastProgressSaveAt;
   bool get _isSeriesPlayback => widget.seriesId != null;
+
+  Offset _surfaceTarget(double fx, double fy) {
+    final context = _playerSurfaceKey.currentContext;
+    if (context == null) return Offset.zero;
+    final box = context.findRenderObject() as RenderBox?;
+    if (box == null || !box.hasSize) return Offset.zero;
+    return box.localToGlobal(Offset(box.size.width * fx, box.size.height * fy));
+  }
 
   void _syncPlaybackState() {
     final state = _ctrl.playbackState.value;
@@ -94,9 +106,21 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
   void _markControlsVisibleHint() {
     _remoteAutoHideTimer?.cancel();
     _controlsHintTimer?.cancel();
-    _controlsLikelyVisible = true;
+    if (mounted) {
+      setState(() {
+        _controlsLikelyVisible = true;
+      });
+    } else {
+      _controlsLikelyVisible = true;
+    }
     _controlsHintTimer = Timer(_controlsHintDuration, () {
-      _controlsLikelyVisible = false;
+      if (!mounted) {
+        _controlsLikelyVisible = false;
+        return;
+      }
+      setState(() {
+        _controlsLikelyVisible = false;
+      });
     });
     _remoteAutoHideTimer = Timer(_remoteAutoHideDuration, _hideControlsFromInactivity);
   }
@@ -109,17 +133,9 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
 
   void _focusPlayPauseAfterOverlayShown() {
     if (!mounted) return;
-
-    _playerFocusNode.requestFocus();
-
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      if (_playerFocusNode.hasFocus) {
-        _playerFocusNode.nextFocus();
-      } else {
-        _playerFocusNode.requestFocus();
-        _playerFocusNode.nextFocus();
-      }
+      _playPauseFocusNode.requestFocus();
     });
   }
 
@@ -149,6 +165,30 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
     );
   }
 
+  void _simulateTapAt(double fx, double fy) {
+    final context = _playerSurfaceKey.currentContext;
+    if (context == null) return;
+    final box = context.findRenderObject() as RenderBox?;
+    if (box == null || !box.hasSize) return;
+
+    final position = _surfaceTarget(fx, fy);
+    final pointer = _syntheticPointerId++;
+    GestureBinding.instance.handlePointerEvent(
+      PointerDownEvent(
+        pointer: pointer,
+        position: position,
+        kind: PointerDeviceKind.touch,
+      ),
+    );
+    GestureBinding.instance.handlePointerEvent(
+      PointerUpEvent(
+        pointer: pointer,
+        position: position,
+        kind: PointerDeviceKind.touch,
+      ),
+    );
+  }
+
   bool _isSelectKey(LogicalKeyboardKey key) =>
       key == LogicalKeyboardKey.select ||
       key == LogicalKeyboardKey.enter ||
@@ -173,21 +213,7 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
     _playerFocusNode.requestFocus();
   }
 
-  bool _isTimelineFocused() {
-    final focus = FocusManager.instance.primaryFocus;
-    if (focus == null) return false;
-    final label = (focus.debugLabel ?? '').toLowerCase();
-    if (label.contains('timeline') ||
-        label.contains('seek') ||
-        label.contains('slider') ||
-        label.contains('progress')) {
-      return true;
-    }
-    final widgetName = focus.context?.widget.runtimeType.toString().toLowerCase() ?? '';
-    return widgetName.contains('slider') ||
-        widgetName.contains('seek') ||
-        widgetName.contains('progress');
-  }
+  bool _isTimelineFocused() => _timelineFocusNode.hasFocus;
 
   Duration _coercePendingSeek(Duration value) {
     final max = _duration > Duration.zero ? _duration : value;
@@ -217,8 +243,63 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
     });
     await _ctrl.seekTo(pending);
     _markControlsVisibleHint();
-    if (mounted) {
-      FocusManager.instance.primaryFocus?.requestFocus();
+    if (mounted) _timelineFocusNode.requestFocus();
+  }
+
+  void _activateFocusedControl() {
+    if (_timelineFocusNode.hasFocus) {
+      if (_pendingTimelineSeek != null) {
+        unawaited(_confirmPendingSeek());
+      }
+      return;
+    }
+
+    if (_rewindFocusNode.hasFocus) {
+      _simulateTapAt(0.38, 0.88);
+      return;
+    }
+    if (_forwardFocusNode.hasFocus) {
+      _simulateTapAt(0.62, 0.88);
+      return;
+    }
+
+    _simulateTapAt(0.50, 0.88);
+  }
+
+  void _moveControlFocus(LogicalKeyboardKey key) {
+    final current = FocusManager.instance.primaryFocus;
+
+    if (current == _playPauseFocusNode) {
+      if (key == LogicalKeyboardKey.arrowLeft) {
+        _rewindFocusNode.requestFocus();
+      } else if (key == LogicalKeyboardKey.arrowRight) {
+        _forwardFocusNode.requestFocus();
+      } else if (key == LogicalKeyboardKey.arrowDown) {
+        _timelineFocusNode.requestFocus();
+      }
+      return;
+    }
+
+    if (current == _rewindFocusNode) {
+      if (key == LogicalKeyboardKey.arrowRight) {
+        _playPauseFocusNode.requestFocus();
+      } else if (key == LogicalKeyboardKey.arrowDown) {
+        _timelineFocusNode.requestFocus();
+      }
+      return;
+    }
+
+    if (current == _forwardFocusNode) {
+      if (key == LogicalKeyboardKey.arrowLeft) {
+        _playPauseFocusNode.requestFocus();
+      } else if (key == LogicalKeyboardKey.arrowDown) {
+        _timelineFocusNode.requestFocus();
+      }
+      return;
+    }
+
+    if (current == _timelineFocusNode && key == LogicalKeyboardKey.arrowUp) {
+      _playPauseFocusNode.requestFocus();
     }
   }
 
@@ -237,13 +318,9 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
         _openControlsFromRemote();
         return KeyEventResult.handled;
       }
-      if (_isTimelineFocused() && _pendingTimelineSeek != null) {
-        unawaited(_confirmPendingSeek());
-        return KeyEventResult.handled;
-      }
-
       _markControlsVisibleHint();
-      return KeyEventResult.ignored;
+      _activateFocusedControl();
+      return KeyEventResult.handled;
     }
 
     if (_isArrowKey(key)) {
@@ -260,18 +337,8 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
       }
 
       _markControlsVisibleHint();
-      if (_playerFocusNode.hasFocus) {
-        final direction = switch (key) {
-          LogicalKeyboardKey.arrowUp => TraversalDirection.up,
-          LogicalKeyboardKey.arrowDown => TraversalDirection.down,
-          LogicalKeyboardKey.arrowLeft => TraversalDirection.left,
-          LogicalKeyboardKey.arrowRight => TraversalDirection.right,
-          _ => TraversalDirection.right,
-        };
-        _playerFocusNode.focusInDirection(direction);
-        return KeyEventResult.handled;
-      }
-      return KeyEventResult.ignored;
+      _moveControlFocus(key);
+      return KeyEventResult.handled;
     }
 
     return KeyEventResult.ignored;
@@ -371,6 +438,10 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
     _controlsHintTimer?.cancel();
     _remoteAutoHideTimer?.cancel();
     _playerScopeNode.dispose();
+    _playPauseFocusNode.dispose();
+    _timelineFocusNode.dispose();
+    _rewindFocusNode.dispose();
+    _forwardFocusNode.dispose();
     _playerFocusNode.dispose();
     unawaited(_saveProgress(force: true));
     try {
@@ -402,6 +473,8 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
                     child: Focus(
                       focusNode: _playerFocusNode,
                       autofocus: true,
+                      canRequestFocus: true,
+                      descendantsAreFocusable: true,
                       onKeyEvent: _handlePlayerKey,
                       onFocusChange: (hasFocus) {
                         if (hasFocus && _controlsLikelyVisible) {
@@ -414,7 +487,7 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
                         child: ThaModernPlayer(
                           controller: _ctrl,
                           doubleTapSeek: const Duration(seconds: 10),
-                          autoHideAfter: const Duration(seconds: 3),
+                          autoHideAfter: const Duration(seconds: 8),
                           initialBoxFit: BoxFit.contain,
                           autoFullscreen: false,
                           isFullscreen: true,
@@ -499,6 +572,52 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
                   ),
                 ),
               ),
+
+              if (_controlsLikelyVisible)
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: FocusTraversalGroup(
+                      policy: OrderedTraversalPolicy(),
+                      child: Stack(
+                        children: [
+                          Positioned(
+                            left: 0,
+                            right: 0,
+                            bottom: 92,
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Focus(
+                                  focusNode: _rewindFocusNode,
+                                  child: const SizedBox(width: 52, height: 52),
+                                ),
+                                const SizedBox(width: 28),
+                                Focus(
+                                  focusNode: _playPauseFocusNode,
+                                  child: const SizedBox(width: 64, height: 64),
+                                ),
+                                const SizedBox(width: 28),
+                                Focus(
+                                  focusNode: _forwardFocusNode,
+                                  child: const SizedBox(width: 52, height: 52),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Positioned(
+                            left: 70,
+                            right: 70,
+                            bottom: 36,
+                            child: Focus(
+                              focusNode: _timelineFocusNode,
+                              child: const SizedBox(height: 32),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
 
               if (_show4KDialog)
                 Positioned.fill(
