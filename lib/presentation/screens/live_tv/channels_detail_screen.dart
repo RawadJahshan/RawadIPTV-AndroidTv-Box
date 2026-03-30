@@ -463,13 +463,6 @@ class _ChannelsDetailScreenState extends State<ChannelsDetailScreen> {
       return KeyEventResult.handled;
     }
 
-    if (_isFullscreen &&
-        (event.logicalKey == LogicalKeyboardKey.escape ||
-            event.logicalKey == LogicalKeyboardKey.goBack)) {
-      _exitFullscreenMode();
-      return KeyEventResult.handled;
-    }
-
     return KeyEventResult.ignored;
   }
 
@@ -529,14 +522,12 @@ class _ChannelsDetailScreenState extends State<ChannelsDetailScreen> {
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
 
-    return WillPopScope(
-      onWillPop: () async {
-        if (_isFullscreen) {
+    return PopScope(
+      canPop: !_isFullscreen,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop && _isFullscreen) {
           _exitFullscreenMode();
-          return false;
         }
-        _forceLandscape();
-        return true;
       },
       child: Scaffold(
         backgroundColor: const Color(0xFF1E1E1E),
