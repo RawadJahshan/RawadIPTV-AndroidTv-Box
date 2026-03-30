@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../data/datasources/remote/xtream_api.dart';
+import '../../../data/services/catalog_cache_service.dart';
 import '../../../data/services/favorites_service.dart';
 import '../../../data/services/watch_progress_service.dart';
 import '../player/movie_player_screen.dart';
@@ -14,12 +15,14 @@ import '../../widgets/tv_keyboard_text_field.dart';
 
 class SeriesListScreen extends StatefulWidget {
   final XtreamApi xtreamApi;
+  final String profileId;
   final int categoryId;
   final String categoryName;
 
   const SeriesListScreen({
     super.key,
     required this.xtreamApi,
+    required this.profileId,
     required this.categoryId,
     required this.categoryName,
   });
@@ -76,9 +79,16 @@ class _SeriesListScreenState extends State<SeriesListScreen> {
     try {
       final List<Map<String, dynamic>> rawSeries;
       if (widget.categoryId == -1) {
-        rawSeries = await widget.xtreamApi.getSeries();
+        final cached = await CatalogCacheService.getSeries(widget.profileId);
+        rawSeries = cached.isNotEmpty ? cached : await widget.xtreamApi.getSeries();
       } else {
-        rawSeries = await widget.xtreamApi.getSeries(categoryId: widget.categoryId);
+        final cached = await CatalogCacheService.getSeries(
+          widget.profileId,
+          categoryId: widget.categoryId,
+        );
+        rawSeries = cached.isNotEmpty
+            ? cached
+            : await widget.xtreamApi.getSeries(categoryId: widget.categoryId);
       }
 
       if (!mounted) return;

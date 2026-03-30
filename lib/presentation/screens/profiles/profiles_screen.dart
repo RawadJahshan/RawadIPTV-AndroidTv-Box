@@ -11,6 +11,7 @@ import '../../../data/services/profile_service.dart';
 import '../../widgets/tv_focusable.dart';
 import '../../widgets/tv_keyboard_text_field.dart';
 import '../home/home_dashboard.dart';
+import 'playlist_import_screen.dart';
 import 'package:intl/intl.dart';
 
 String formatUnixTimestamp(String unixTimestamp) {
@@ -80,6 +81,7 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
           username: profile.username,
           expiryDate: profile.expiryDate ?? 'Unknown',
           xtreamApi: xtreamApi,
+          profileId: profile.id,
         ),
       ),
     );
@@ -562,11 +564,26 @@ class _AddProfileDialogState extends State<_AddProfileDialog> {
       );
 
       await ProfileService.saveProfile(profile);
+      await ProfileService.setActiveProfile(profile.id);
+
+      final xtreamApi = XtreamApi();
+      xtreamApi.setCredentials(
+        serverUrl: AppConstants.serverUrl,
+        username: username,
+        password: password,
+      );
 
       if (!mounted) return;
-      setState(() => _isLoading = false);
       Navigator.pop(context);
-      widget.onProfileAdded();
+      Navigator.of(context, rootNavigator: true).pushReplacement(
+        MaterialPageRoute(
+          builder: (_) => PlaylistImportScreen(
+            xtreamApi: xtreamApi,
+            profile: profile,
+            mode: PlaylistImportMode.initialAdd,
+          ),
+        ),
+      );
     } catch (_) {
       if (!mounted) return;
       setState(() => _isLoading = false);

@@ -6,6 +6,7 @@ class Profile {
   final String password;
   final String? expiryDate;
   final String? avatarLetter;
+  final String? lastRefreshAt;
 
   Profile({
     required this.id,
@@ -15,6 +16,7 @@ class Profile {
     required this.password,
     this.expiryDate,
     this.avatarLetter,
+    this.lastRefreshAt,
   });
 
   Map<String, dynamic> toJson() => {
@@ -25,6 +27,7 @@ class Profile {
         'password': password,
         'expiryDate': expiryDate ?? '',
         'avatarLetter': avatarLetter ?? name[0].toUpperCase(),
+        'lastRefreshAt': lastRefreshAt ?? '',
       };
 
   factory Profile.fromJson(Map<String, dynamic> json) => Profile(
@@ -35,5 +38,28 @@ class Profile {
         password: json['password'],
         expiryDate: json['expiryDate'],
         avatarLetter: json['avatarLetter'],
+        lastRefreshAt: json['lastRefreshAt'],
       );
+
+  Profile copyWith({
+    String? id,
+    String? name,
+    String? serverUrl,
+    String? username,
+    String? password,
+    String? expiryDate,
+    String? avatarLetter,
+    String? lastRefreshAt,
+  }) {
+    return Profile(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      serverUrl: serverUrl ?? this.serverUrl,
+      username: username ?? this.username,
+      password: password ?? this.password,
+      expiryDate: expiryDate ?? this.expiryDate,
+      avatarLetter: avatarLetter ?? this.avatarLetter,
+      lastRefreshAt: lastRefreshAt ?? this.lastRefreshAt,
+    );
+  }
 }
