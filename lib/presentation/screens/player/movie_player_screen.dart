@@ -34,12 +34,15 @@ class MoviePlayerScreen extends StatefulWidget {
 }
 
 class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
+  static const MethodChannel _deviceInfoChannel = MethodChannel('rawad_iptv/device_info');
+
   late ThaNativePlayerController _ctrl;
 
   Timer? _progressTimer;
 
   String? _errorMessage;
   bool _show4KDialog = false;
+  bool? _isAndroidTvDevice;
 
   Duration _position = Duration.zero;
   Duration _duration = Duration.zero;
@@ -124,6 +127,7 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
   @override
   void initState() {
     super.initState();
+    _detectAndroidTvDevice();
     SystemChrome.setPreferredOrientations([
       DeviceOrientation.landscapeLeft,
       DeviceOrientation.landscapeRight,
@@ -164,6 +168,27 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
           'streamId': widget.streamId,
         }),
       );
+    }
+  }
+
+
+  Future<void> _detectAndroidTvDevice() async {
+    if (!_isAndroidPlatform) {
+      return;
+    }
+
+    try {
+      final isTv = await _deviceInfoChannel.invokeMethod<bool>('isAndroidTv') ?? false;
+      if (!mounted) return;
+      setState(() {
+        _isAndroidTvDevice = isTv;
+      });
+    } catch (_) {
+      // Keep navigation-mode fallback when platform channel is unavailable.
+      if (!mounted) return;
+      setState(() {
+        _isAndroidTvDevice = null;
+      });
     }
   }
 
@@ -246,7 +271,8 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final isTvMode = _isAndroidPlatform && MediaQuery.maybeNavigationModeOf(context) == NavigationMode.directional;
+    final isTvMode = _isAndroidPlatform &&
+        (_isAndroidTvDevice ?? MediaQuery.maybeNavigationModeOf(context) == NavigationMode.directional);
 
     return PopScope(
       canPop: true,
