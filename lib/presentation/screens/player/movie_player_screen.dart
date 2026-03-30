@@ -36,7 +36,6 @@ class MoviePlayerScreen extends StatefulWidget {
 }
 
 class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
-  static const Duration _controlsHintDuration = Duration(seconds: 8);
   static const Duration _remoteAutoHideDuration = Duration(seconds: 8);
   static const Duration _tvSeekStep = Duration(seconds: 10);
 
@@ -51,11 +50,10 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
     debugLabel: 'movie_player_scope',
   );
   Timer? _progressTimer;
-  Timer? _controlsHintTimer;
   Timer? _remoteAutoHideTimer;
   String? _errorMessage;
   bool _show4KDialog = false;
-  bool _controlsLikelyVisible = false;
+  bool _overlayVisible = false;
   int _syntheticPointerId = 9000;
   Duration? _pendingTimelineSeek;
 
@@ -103,31 +101,22 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
   }
 
 
-  void _markControlsVisibleHint() {
+  void _restartOverlayAutoHideTimer() {
     _remoteAutoHideTimer?.cancel();
-    _controlsHintTimer?.cancel();
-    if (mounted) {
-      setState(() {
-        _controlsLikelyVisible = true;
-      });
-    } else {
-      _controlsLikelyVisible = true;
-    }
-    _controlsHintTimer = Timer(_controlsHintDuration, () {
-      if (!mounted) {
-        _controlsLikelyVisible = false;
-        return;
-      }
-      setState(() {
-        _controlsLikelyVisible = false;
-      });
-    });
-    _remoteAutoHideTimer = Timer(_remoteAutoHideDuration, _hideControlsFromInactivity);
+    _remoteAutoHideTimer = Timer(
+      _remoteAutoHideDuration,
+      _hideControlsFromInactivity,
+    );
   }
 
   void _openControlsFromRemote() {
-    _markControlsVisibleHint();
+    if (!mounted) return;
+    setState(() {
+      _overlayVisible = true;
+      _pendingTimelineSeek = null;
+    });
     _simulateSurfaceTap();
+    _restartOverlayAutoHideTimer();
     _focusPlayPauseAfterOverlayShown();
   }
 
@@ -204,13 +193,15 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
   bool get _isAndroidPlatform => defaultTargetPlatform == TargetPlatform.android;
 
   void _hideControlsFromInactivity() {
-    if (!mounted || !_controlsLikelyVisible) return;
+    if (!mounted || !_overlayVisible) return;
     setState(() {
-      _controlsLikelyVisible = false;
+      _overlayVisible = false;
       _pendingTimelineSeek = null;
     });
     _simulateSurfaceTap();
-    _playerFocusNode.requestFocus();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _playerFocusNode.requestFocus();
+    });
   }
 
   bool _isTimelineFocused() => _timelineFocusNode.hasFocus;
@@ -232,7 +223,7 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
     setState(() {
       _pendingTimelineSeek = _coercePendingSeek(next);
     });
-    _markControlsVisibleHint();
+    _restartOverlayAutoHideTimer();
   }
 
   Future<void> _confirmPendingSeek() async {
@@ -242,7 +233,7 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
       _pendingTimelineSeek = null;
     });
     await _ctrl.seekTo(pending);
-    _markControlsVisibleHint();
+    _restartOverlayAutoHideTimer();
     if (mounted) _timelineFocusNode.requestFocus();
   }
 
@@ -256,14 +247,17 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
 
     if (_rewindFocusNode.hasFocus) {
       _simulateTapAt(0.38, 0.88);
+      _restartOverlayAutoHideTimer();
       return;
     }
     if (_forwardFocusNode.hasFocus) {
       _simulateTapAt(0.62, 0.88);
+      _restartOverlayAutoHideTimer();
       return;
     }
 
     _simulateTapAt(0.50, 0.88);
+    _restartOverlayAutoHideTimer();
   }
 
   void _moveControlFocus(LogicalKeyboardKey key) {
@@ -314,19 +308,18 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
     }
 
     if (_isSelectKey(key)) {
-      if (!_controlsLikelyVisible) {
+      if (!_overlayVisible) {
         _openControlsFromRemote();
         return KeyEventResult.handled;
       }
-      _markControlsVisibleHint();
+      _restartOverlayAutoHideTimer();
       _activateFocusedControl();
       return KeyEventResult.handled;
     }
 
     if (_isArrowKey(key)) {
-      if (!_controlsLikelyVisible) {
-        _openControlsFromRemote();
-        return KeyEventResult.handled;
+      if (!_overlayVisible) {
+        return KeyEventResult.ignored;
       }
 
       if (_isTimelineFocused() &&
@@ -336,7 +329,7 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
         return KeyEventResult.handled;
       }
 
-      _markControlsVisibleHint();
+      _restartOverlayAutoHideTimer();
       _moveControlFocus(key);
       return KeyEventResult.handled;
     }
@@ -435,7 +428,6 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
   void dispose() {
     _restoreLandscapeAndSystemUi();
     _progressTimer?.cancel();
-    _controlsHintTimer?.cancel();
     _remoteAutoHideTimer?.cancel();
     _playerScopeNode.dispose();
     _playPauseFocusNode.dispose();
@@ -477,8 +469,8 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
                       descendantsAreFocusable: true,
                       onKeyEvent: _handlePlayerKey,
                       onFocusChange: (hasFocus) {
-                        if (hasFocus && _controlsLikelyVisible) {
-                          _markControlsVisibleHint();
+                        if (hasFocus && _overlayVisible) {
+                          _restartOverlayAutoHideTimer();
                         }
                       },
                       child: Container(
@@ -573,11 +565,13 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
                 ),
               ),
 
-              if (_controlsLikelyVisible)
-                Positioned.fill(
-                  child: IgnorePointer(
-                    child: FocusTraversalGroup(
-                      policy: OrderedTraversalPolicy(),
+              Positioned.fill(
+                child: IgnorePointer(
+                  child: FocusTraversalGroup(
+                    policy: OrderedTraversalPolicy(),
+                    child: Focus(
+                      canRequestFocus: false,
+                      descendantsAreFocusable: _overlayVisible,
                       child: Stack(
                         children: [
                           Positioned(
@@ -587,19 +581,25 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
                             child: Row(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                Focus(
+                                _TvFocusableControl(
                                   focusNode: _rewindFocusNode,
-                                  child: const SizedBox(width: 52, height: 52),
+                                  enabled: _overlayVisible,
+                                  width: 52,
+                                  height: 52,
                                 ),
                                 const SizedBox(width: 28),
-                                Focus(
+                                _TvFocusableControl(
                                   focusNode: _playPauseFocusNode,
-                                  child: const SizedBox(width: 64, height: 64),
+                                  enabled: _overlayVisible,
+                                  width: 64,
+                                  height: 64,
                                 ),
                                 const SizedBox(width: 28),
-                                Focus(
+                                _TvFocusableControl(
                                   focusNode: _forwardFocusNode,
-                                  child: const SizedBox(width: 52, height: 52),
+                                  enabled: _overlayVisible,
+                                  width: 52,
+                                  height: 52,
                                 ),
                               ],
                             ),
@@ -608,9 +608,11 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
                             left: 70,
                             right: 70,
                             bottom: 36,
-                            child: Focus(
+                            child: _TvFocusableControl(
                               focusNode: _timelineFocusNode,
-                              child: const SizedBox(height: 32),
+                              enabled: _overlayVisible,
+                              width: double.infinity,
+                              height: 32,
                             ),
                           ),
                         ],
@@ -618,6 +620,7 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
                     ),
                   ),
                 ),
+              ),
 
               if (_show4KDialog)
                 Positioned.fill(
@@ -726,6 +729,29 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _TvFocusableControl extends StatelessWidget {
+  final FocusNode focusNode;
+  final bool enabled;
+  final double width;
+  final double height;
+
+  const _TvFocusableControl({
+    required this.focusNode,
+    required this.enabled,
+    required this.width,
+    required this.height,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return FocusableActionDetector(
+      focusNode: focusNode,
+      enabled: enabled,
+      child: SizedBox(width: width, height: height),
     );
   }
 }
