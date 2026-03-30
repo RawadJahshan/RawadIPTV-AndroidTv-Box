@@ -435,6 +435,47 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
     );
   }
 
+
+  ButtonStyle _tvActionButtonStyle({
+    required Color baseColor,
+    Color? focusedColor,
+  }) {
+    return ButtonStyle(
+      padding: WidgetStateProperty.all(
+        const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
+      ),
+      backgroundColor: WidgetStateProperty.resolveWith((states) {
+        if (states.contains(WidgetState.disabled)) {
+          return baseColor.withValues(alpha: 0.6);
+        }
+        if (states.contains(WidgetState.focused)) {
+          return focusedColor ?? baseColor.withValues(alpha: 0.92);
+        }
+        return baseColor;
+      }),
+      foregroundColor: WidgetStateProperty.all(Colors.white),
+      side: WidgetStateProperty.resolveWith((states) {
+        if (states.contains(WidgetState.focused)) {
+          return const BorderSide(color: Color(0xFF00C6FF), width: 2.4);
+        }
+        return const BorderSide(color: Colors.transparent, width: 1);
+      }),
+      elevation: WidgetStateProperty.resolveWith((states) {
+        if (states.contains(WidgetState.focused)) {
+          return 9;
+        }
+        return 0;
+      }),
+      shadowColor: WidgetStateProperty.all(const Color(0xFF00C6FF)),
+      overlayColor: WidgetStateProperty.resolveWith((states) {
+        if (states.contains(WidgetState.focused)) {
+          return Colors.white.withValues(alpha: 0.06);
+        }
+        return null;
+      }),
+    );
+  }
+
   Widget _buildActionButtons() {
     final hasTrailer = _trailerUrl.trim().isNotEmpty;
 
@@ -444,12 +485,9 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
       children: [
         ElevatedButton.icon(
           onPressed: _onPlayNow,
-          style: ElevatedButton.styleFrom(
-            backgroundColor: const Color(0xFF0077B6),
-            disabledBackgroundColor: const Color(0xFF0077B6),
-            foregroundColor: Colors.white,
-            disabledForegroundColor: Colors.white,
-            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
+          style: _tvActionButtonStyle(
+            baseColor: const Color(0xFF0077B6),
+            focusedColor: const Color(0xFF0A8FD7),
           ),
           icon: const Icon(Icons.play_circle_fill, size: 18),
           label: const Text('Play Now'),
@@ -457,9 +495,9 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
         FilledButton.icon(
           icon: Icon(_isFavorite ? Icons.favorite : Icons.favorite_border),
           label: Text(_isFavorite ? 'Remove from Favorites' : 'Add to Favorites'),
-          style: FilledButton.styleFrom(
-            backgroundColor: _isFavorite ? Colors.red : null,
-            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
+          style: _tvActionButtonStyle(
+            baseColor: _isFavorite ? Colors.red : const Color(0xFF374151),
+            focusedColor: _isFavorite ? const Color(0xFFFF5C5C) : const Color(0xFF4B5563),
           ),
           onPressed: () async {
             final movie = widget.movie;
@@ -487,10 +525,9 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
         if (hasTrailer) ...[
           ElevatedButton.icon(
             onPressed: _openTrailer,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF00A86B),
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
+            style: _tvActionButtonStyle(
+              baseColor: const Color(0xFF00A86B),
+              focusedColor: const Color(0xFF00C27B),
             ),
             icon: const Icon(Icons.ondemand_video, size: 18),
             label: const Text('Play Trailer'),
