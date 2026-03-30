@@ -615,10 +615,13 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
                               ],
                             ),
                           ),
-                          IconButton(
+                          Focus(
                             canRequestFocus: false,
-                            onPressed: () => _playEpisode(episode, _selectedSeason),
-                            icon: const Icon(Icons.play_circle, color: Colors.white, size: 30),
+                            descendantsAreFocusable: false,
+                            child: IconButton(
+                              onPressed: () => _playEpisode(episode, _selectedSeason),
+                              icon: const Icon(Icons.play_circle, color: Colors.white, size: 30),
+                            ),
                           ),
                         ],
                       ),
