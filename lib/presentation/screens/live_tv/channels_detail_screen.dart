@@ -567,9 +567,12 @@ class _ChannelsDetailScreenState extends State<ChannelsDetailScreen> {
                                     onFocusChange: (focused) {
                                       if (!focused) return;
                                       _lastMainFocusArea = _LiveTvFocusArea.channelList;
-                                      if (!focusNode.context.mounted) return;
+                                      final itemContext = focusNode.context;
+                                      if (itemContext == null || !itemContext.mounted) {
+                                        return;
+                                      }
                                       Scrollable.ensureVisible(
-                                        focusNode.context!,
+                                        itemContext,
                                         alignment: 0.5,
                                         duration: const Duration(milliseconds: 140),
                                       );
