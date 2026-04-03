@@ -572,29 +572,30 @@ class _MoviePlayerScreenState extends State<MoviePlayerScreen> {
         child: Stack(
           children: [
             _buildTvVideoSurface(),
-            Positioned(
-              top: 0,
-              left: 0,
-              right: 0,
-              child: IgnorePointer(
-                child: SafeArea(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-                    child: Text(
-                      widget.title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 20,
-                        fontWeight: FontWeight.w600,
-                        shadows: [Shadow(color: Colors.black87, blurRadius: 6)],
+            if (_tvOverlayVisible)
+              Positioned(
+                top: 0,
+                left: 0,
+                right: 0,
+                child: IgnorePointer(
+                  child: SafeArea(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                      child: Text(
+                        widget.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 20,
+                          fontWeight: FontWeight.w600,
+                          shadows: [Shadow(color: Colors.black87, blurRadius: 6)],
+                        ),
                       ),
                     ),
                   ),
                 ),
               ),
-            ),
             if (_tvOverlayVisible)
               Positioned(
                 left: 24,

@@ -245,14 +245,21 @@ class _ChannelsDetailScreenState extends State<ChannelsDetailScreen> {
   }
 
   Future<List<Channel>> _loadChannels() async {
-    var rawChannels = await CatalogCacheService.getLiveStreams(
+    var rawChannels = await CatalogCacheService.getLiveStreamsByCategory(
       widget.profileId,
-      categoryId: widget.category.id,
+      widget.category.id,
     );
     if (rawChannels.isEmpty) {
       rawChannels = await widget.xtreamApi.getLiveStreams(
         categoryId: widget.category.id,
       );
+      if (rawChannels.isNotEmpty) {
+        await CatalogCacheService.saveLiveStreamsByCategory(
+          widget.profileId,
+          widget.category.id,
+          rawChannels,
+        );
+      }
     }
     return rawChannels
         .map((json) => Channel.fromJson(

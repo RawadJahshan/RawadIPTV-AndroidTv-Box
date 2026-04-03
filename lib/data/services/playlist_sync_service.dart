@@ -19,78 +19,62 @@ class PlaylistSyncProgress {
   double get progress => totalSteps == 0 ? 0 : step / totalSteps;
 }
 
+/// Lightweight catalog warmup.
+///
+/// Only fetches the three category lists (live / VOD / series).
+/// Heavy content (channels, movies, series items) is NOT prefetched here —
+/// it is loaded lazily when the user opens a category, then cached with a
+/// 2-hour TTL by each screen.
+///
+/// Steps: 1 = fetch categories (parallel)  2 = save  3 = done
 class PlaylistSyncService {
-  static const int _totalSteps = 6;
+  static const int _totalSteps = 3;
 
   static Future<void> syncXtreamCatalog({
     required XtreamApi xtreamApi,
     required String profileId,
     required ValueChanged<PlaylistSyncProgress> onProgress,
   }) async {
+    // Clear stale in-memory cache so re-fetched data is fresh.
+    XtreamApi.clearAllInMemoryCaches();
+    // Clear all on-disk cached data for this profile so every category and
+    // item screen will refetch from the API on next visit.
+    await CatalogCacheService.clearAllForProfile(profileId);
+
     onProgress(
       const PlaylistSyncProgress(
-        title: 'Adding Playlist Content',
+        title: 'Refreshing Playlist',
         status: 'Fetching categories...',
         step: 1,
         totalSteps: _totalSteps,
       ),
     );
 
-    final liveCategories = await xtreamApi.getLiveCategories();
-    final vodCategories = await xtreamApi.getVodCategories();
-    final seriesCategories = await xtreamApi.getSeriesCategories();
+    // Fetch all three category lists in parallel — fast lightweight calls.
+    final results = await Future.wait([
+      xtreamApi.getLiveCategories(),
+      xtreamApi.getVodCategories(),
+      xtreamApi.getSeriesCategories(),
+    ]);
 
     onProgress(
       const PlaylistSyncProgress(
-        title: 'Adding Playlist Content',
-        status: 'Loading Live TV...',
+        title: 'Refreshing Playlist',
+        status: 'Saving categories...',
         step: 2,
         totalSteps: _totalSteps,
       ),
     );
-    final liveStreams = await xtreamApi.getLiveStreams();
+
+    await CatalogCacheService.saveLiveCategories(profileId, results[0]);
+    await CatalogCacheService.saveVodCategories(profileId, results[1]);
+    await CatalogCacheService.saveSeriesCategories(profileId, results[2]);
 
     onProgress(
       const PlaylistSyncProgress(
-        title: 'Adding Playlist Content',
-        status: 'Loading Movies...',
+        title: 'Refreshing Playlist',
+        status: 'Done',
         step: 3,
-        totalSteps: _totalSteps,
-      ),
-    );
-    final vodStreams = await xtreamApi.getVodStreamsStrict();
-
-    onProgress(
-      const PlaylistSyncProgress(
-        title: 'Adding Playlist Content',
-        status: 'Loading Series...',
-        step: 4,
-        totalSteps: _totalSteps,
-      ),
-    );
-    final series = await xtreamApi.getSeries();
-
-    onProgress(
-      const PlaylistSyncProgress(
-        title: 'Adding Playlist Content',
-        status: 'Saving content...',
-        step: 5,
-        totalSteps: _totalSteps,
-      ),
-    );
-
-    await CatalogCacheService.saveLiveCategories(profileId, liveCategories);
-    await CatalogCacheService.saveVodCategories(profileId, vodCategories);
-    await CatalogCacheService.saveSeriesCategories(profileId, seriesCategories);
-    await CatalogCacheService.saveLiveStreams(profileId, liveStreams);
-    await CatalogCacheService.saveVodStreams(profileId, vodStreams);
-    await CatalogCacheService.saveSeries(profileId, series);
-
-    onProgress(
-      const PlaylistSyncProgress(
-        title: 'Adding Playlist Content',
-        status: 'Completed',
-        step: 6,
         totalSteps: _totalSteps,
       ),
     );

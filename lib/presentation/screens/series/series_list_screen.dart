@@ -79,16 +79,27 @@ class _SeriesListScreenState extends State<SeriesListScreen> {
     try {
       final List<Map<String, dynamic>> rawSeries;
       if (widget.categoryId == -1) {
-        final cached = await CatalogCacheService.getSeries(widget.profileId);
-        rawSeries = cached.isNotEmpty ? cached : await widget.xtreamApi.getSeries();
+        // "All" category — fetch directly from API (no bulk pre-cache).
+        rawSeries = await widget.xtreamApi.getSeries();
       } else {
-        final cached = await CatalogCacheService.getSeries(
+        final cached = await CatalogCacheService.getSeriesByCategory(
           widget.profileId,
-          categoryId: widget.categoryId,
+          widget.categoryId,
         );
-        rawSeries = cached.isNotEmpty
-            ? cached
-            : await widget.xtreamApi.getSeries(categoryId: widget.categoryId);
+        if (cached.isNotEmpty) {
+          rawSeries = cached;
+        } else {
+          final fetched =
+              await widget.xtreamApi.getSeries(categoryId: widget.categoryId);
+          if (fetched.isNotEmpty) {
+            await CatalogCacheService.saveSeriesByCategory(
+              widget.profileId,
+              widget.categoryId,
+              fetched,
+            );
+          }
+          rawSeries = fetched;
+        }
       }
 
       if (!mounted) return;

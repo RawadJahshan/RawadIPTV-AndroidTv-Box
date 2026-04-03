@@ -140,18 +140,28 @@ class _MovieListScreenState extends State<MovieListScreen> {
     try {
       final List<Map<String, dynamic>> rawStreams;
       if (widget.categoryId == -1) {
-        final cached = await CatalogCacheService.getVodStreams(widget.profileId);
-        rawStreams = cached.isNotEmpty ? cached : await widget.xtreamApi.getVodStreamsStrict();
+        // "All" category — fetch directly from API (no bulk pre-cache).
+        rawStreams = await widget.xtreamApi.getVodStreamsStrict();
       } else {
-        final cached = await CatalogCacheService.getVodStreams(
+        final cached = await CatalogCacheService.getVodStreamsByCategory(
           widget.profileId,
-          categoryId: widget.categoryId,
+          widget.categoryId,
         );
-        rawStreams = cached.isNotEmpty
-            ? cached
-            : await widget.xtreamApi.getVodStreamsStrict(
-                categoryId: widget.categoryId,
-              );
+        if (cached.isNotEmpty) {
+          rawStreams = cached;
+        } else {
+          final fetched = await widget.xtreamApi.getVodStreamsStrict(
+            categoryId: widget.categoryId,
+          );
+          if (fetched.isNotEmpty) {
+            await CatalogCacheService.saveVodStreamsByCategory(
+              widget.profileId,
+              widget.categoryId,
+              fetched,
+            );
+          }
+          rawStreams = fetched;
+        }
       }
 
       final movies = rawStreams.map((json) => MovieItem.fromJson(json)).toList();

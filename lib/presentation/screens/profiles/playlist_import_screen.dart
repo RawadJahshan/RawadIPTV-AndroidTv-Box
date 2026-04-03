@@ -26,10 +26,10 @@ class PlaylistImportScreen extends StatefulWidget {
 
 class _PlaylistImportScreenState extends State<PlaylistImportScreen> {
   PlaylistSyncProgress _progress = const PlaylistSyncProgress(
-    title: 'Adding Playlist Content',
+    title: 'Refreshing Playlist',
     status: 'Preparing...',
     step: 0,
-    totalSteps: 6,
+    totalSteps: 3,
   );
   String? _error;
 
