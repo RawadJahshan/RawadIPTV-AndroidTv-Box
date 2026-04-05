@@ -1,15 +1,33 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
-import '../../../core/constants/app_constants.dart';
+import '../../services/domain_manager.dart';
+
+class _MemoryCacheEntry {
+  final List<Map<String, dynamic>> data;
+  final DateTime cachedAt;
+  final Duration ttl;
+
+  const _MemoryCacheEntry({
+    required this.data,
+    required this.cachedAt,
+    required this.ttl,
+  });
+
+  bool get isExpired => DateTime.now().difference(cachedAt) > ttl;
+}
 
 class XtreamApi {
   late final Dio _dio;
   static final Set<XtreamApi> _instances = <XtreamApi>{};
-  final Map<String, dynamic> _memoryResponseCache = <String, dynamic>{};
+  final Map<String, _MemoryCacheEntry> _memoryResponseCache = {};
 
   late String _serverUrl;
   late String _username;
   late String _password;
+
+  static const Duration _categoriesTtl = Duration(minutes: 20);
+  static const Duration _categoryItemsTtl = Duration(minutes: 10);
+  static const Duration _accountInfoTtl = Duration(minutes: 30);
 
   XtreamApi() {
     _instances.add(this);
@@ -26,7 +44,8 @@ class XtreamApi {
           'Accept-Language': 'en-US,en;q=0.9',
           'Connection': 'keep-alive',
         },
-        validateStatus: (status) => status != null && status >= 200 && status < 500,
+        // Allow all statuses through — failover logic inspects them.
+        validateStatus: (_) => true,
         responseType: ResponseType.json,
       ),
     );
@@ -34,33 +53,27 @@ class XtreamApi {
     _dio.interceptors.add(
       InterceptorsWrapper(
         onError: (error, handler) {
-          if (error.response?.statusCode == 403) {
-            debugPrint('[API] 403 Forbidden — check credentials or User-Agent');
+          final status = error.response?.statusCode;
+          if (status != null) {
+            debugPrint('[XtreamApi] HTTP $status — ${_statusDescription(status)}');
           }
-          debugPrint('API Error: ${error.message}');
+          debugPrint('[XtreamApi] Error: ${error.message}');
           handler.next(error);
         },
       ),
     );
-
-    _dio.options.headers = {
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
-          'AppleWebKit/537.36 (KHTML, like Gecko) '
-          'Chrome/120.0.0.0 Safari/537.36',
-      'Accept': '*/*',
-      'Accept-Language': 'en-US,en;q=0.9',
-      'Connection': 'keep-alive',
-    };
-    _dio.options.connectTimeout = const Duration(seconds: 15);
-    _dio.options.receiveTimeout = const Duration(seconds: 30);
   }
+
+  // ─── Credentials ──────────────────────────────────────────────────────────
 
   void setCredentials({
     required String serverUrl,
     required String username,
     required String password,
   }) {
-    _serverUrl = AppConstants.serverUrl;
+    // Use the DomainManager's active domain (not the passed serverUrl, which
+    // may be stale). The DomainManager is the single source of truth.
+    _serverUrl = DomainManager.instance.activeDomain;
     _username = username;
     _password = password;
   }
@@ -69,148 +82,284 @@ class XtreamApi {
   String get username => _username;
   String get password => _password;
 
-  String get _baseUrl => '$_serverUrl/player_api.php?username=$_username&password=$_password';
+  // Builds the base URL for the current active domain.
+  String _buildBaseUrl([String? domain]) =>
+      '${domain ?? _serverUrl}/player_api.php?username=$_username&password=$_password';
+
+  // ─── Cache helpers ─────────────────────────────────────────────────────────
+
+  void clearInMemoryCache() => _memoryResponseCache.clear();
 
   static void clearAllInMemoryCaches() {
     for (final instance in _instances) {
       instance._memoryResponseCache.clear();
     }
-    debugPrint('XtreamApi: Cleared in-memory metadata/list caches for ${_instances.length} instance(s)');
+    debugPrint(
+      '[XtreamApi] Cleared in-memory caches for ${_instances.length} instance(s)',
+    );
   }
 
+  // ─── Warm-up ───────────────────────────────────────────────────────────────
+
+  Future<void> warmupLightweightContent({bool forceRefresh = false}) async {
+    if (forceRefresh) clearInMemoryCache();
+    await Future.wait<void>([
+      getAccountInfo(forceRefresh: forceRefresh),
+      getLiveCategories(forceRefresh: forceRefresh),
+      getVodCategories(forceRefresh: forceRefresh),
+      getSeriesCategories(forceRefresh: forceRefresh),
+    ]);
+  }
+
+  // ─── Authentication ────────────────────────────────────────────────────────
+
+  /// Authenticates against all configured domains in priority order and returns
+  /// the result from the first domain that responds successfully.
   Future<Map<String, dynamic>> authenticate(
     String serverUrl,
     String username,
     String password,
   ) async {
-    try {
-      final url = '${AppConstants.apiBase}?username=$username&password=$password&action=get_live_categories';
-      final response = await _dio.get(url);
-      if (response.statusCode == 200) {
-        return {'success': true, 'data': response.data};
+    for (final domain in DomainManager.domains) {
+      try {
+        final url =
+            '$domain/player_api.php?username=$username&password=$password'
+            '&action=get_account_info';
+        debugPrint('[XtreamApi] authenticate => $domain');
+        final response = await _dio.get(url);
+        final status = response.statusCode ?? 0;
+
+        if (status == 200 && response.data is Map) {
+          // Persist the working domain so subsequent calls use it.
+          await DomainManager.instance.setActiveDomain(domain);
+          _serverUrl = domain;
+          return {'success': true, 'data': response.data};
+        }
+
+        debugPrint(
+          '[XtreamApi] authenticate: $domain returned HTTP $status — '
+          '${_statusDescription(status)}',
+        );
+      } on DioException catch (e) {
+        debugPrint('[XtreamApi] authenticate: $domain error: ${e.message}');
+      } catch (e) {
+        debugPrint('[XtreamApi] authenticate: $domain unexpected error: $e');
       }
-      return {'success': false, 'message': 'Invalid username or password'};
-    } on DioException catch (e) {
-      debugPrint('Auth error: ${e.message}');
-      return {'success': false, 'message': 'Invalid username or password'};
-    } catch (e) {
-      return {'success': false, 'message': 'Invalid username or password'};
     }
+
+    return {
+      'success': false,
+      'message': 'All servers are unreachable. Please check your connection.',
+    };
   }
 
-  Future<List<Map<String, dynamic>>> getLiveCategories() async {
-    try {
-      return await _getListWithCache('$_baseUrl&action=get_live_categories');
-    } catch (e) {
-      debugPrint('getLiveCategories error: $e');
-      return [];
-    }
+  // ─── API methods ───────────────────────────────────────────────────────────
+
+  Future<Map<String, dynamic>> getAccountInfo({bool forceRefresh = false}) async {
+    final list = await _getListWithCache(
+      action: 'get_account_info',
+      ttl: _accountInfoTtl,
+      forceRefresh: forceRefresh,
+    );
+    return list.isNotEmpty ? list.first : <String, dynamic>{};
   }
 
-  Future<List<Map<String, dynamic>>> getLiveStreams({int? categoryId}) async {
+  Future<List<Map<String, dynamic>>> getLiveCategories({bool forceRefresh = false}) async {
     try {
-      var url = '$_baseUrl&action=get_live_streams';
-      if (categoryId != null) url += '&category_id=$categoryId';
       return await _getListWithCache(
-        url,
-        options: Options(receiveTimeout: const Duration(seconds: 60)),
+        action: 'get_live_categories',
+        ttl: _categoriesTtl,
+        forceRefresh: forceRefresh,
       );
     } catch (e) {
-      debugPrint('getLiveStreams error: $e');
+      debugPrint('[XtreamApi] getLiveCategories error: $e');
       return [];
     }
   }
 
-  Future<List<Map<String, dynamic>>> getVodCategories() async {
+  Future<List<Map<String, dynamic>>> getLiveStreams({
+    int? categoryId,
+    bool forceRefresh = false,
+  }) async {
     try {
-      return await _getListWithCache('$_baseUrl&action=get_vod_categories');
-    } catch (e) {
-      debugPrint('getVodCategories error: $e');
-      return [];
-    }
-  }
-
-  Future<List<Map<String, dynamic>>> getVodStreams({int? categoryId}) async {
-    try {
-      var url = '$_baseUrl&action=get_vod_streams';
-      if (categoryId != null) {
-        url += '&category_id=$categoryId';
-      }
       return await _getListWithCache(
-        url,
+        action: 'get_live_streams',
+        categoryId: categoryId,
         options: Options(receiveTimeout: const Duration(seconds: 60)),
+        ttl: _categoryItemsTtl,
+        forceRefresh: forceRefresh,
       );
     } catch (e) {
-      debugPrint('getVodStreams error: $e');
+      debugPrint('[XtreamApi] getLiveStreams error: $e');
       return [];
     }
   }
 
-
-  Future<List<Map<String, dynamic>>> getVodStreamsStrict({int? categoryId}) async {
-    var url = '$_baseUrl&action=get_vod_streams';
-    if (categoryId != null) {
-      url += '&category_id=$categoryId';
+  Future<List<Map<String, dynamic>>> getVodCategories({bool forceRefresh = false}) async {
+    try {
+      return await _getListWithCache(
+        action: 'get_vod_categories',
+        ttl: _categoriesTtl,
+        forceRefresh: forceRefresh,
+      );
+    } catch (e) {
+      debugPrint('[XtreamApi] getVodCategories error: $e');
+      return [];
     }
+  }
+
+  Future<List<Map<String, dynamic>>> getVodStreams({
+    int? categoryId,
+    bool forceRefresh = false,
+  }) async {
+    try {
+      return await _getListWithCache(
+        action: 'get_vod_streams',
+        categoryId: categoryId,
+        options: Options(receiveTimeout: const Duration(seconds: 60)),
+        ttl: _categoryItemsTtl,
+        forceRefresh: forceRefresh,
+      );
+    } catch (e) {
+      debugPrint('[XtreamApi] getVodStreams error: $e');
+      return [];
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> getVodStreamsStrict({
+    int? categoryId,
+    bool forceRefresh = false,
+  }) {
     return _getListWithCache(
-      url,
+      action: 'get_vod_streams',
+      categoryId: categoryId,
       options: Options(receiveTimeout: const Duration(seconds: 60)),
+      ttl: _categoryItemsTtl,
+      forceRefresh: forceRefresh,
     );
   }
 
-
-  Future<List<Map<String, dynamic>>> getSeriesCategories() async {
+  Future<List<Map<String, dynamic>>> getSeriesCategories({bool forceRefresh = false}) async {
     try {
-      return await _getListWithCache('$_baseUrl&action=get_series_categories');
+      return await _getListWithCache(
+        action: 'get_series_categories',
+        ttl: _categoriesTtl,
+        forceRefresh: forceRefresh,
+      );
     } catch (e) {
-      debugPrint('getSeriesCategories error: $e');
+      debugPrint('[XtreamApi] getSeriesCategories error: $e');
       return [];
     }
   }
 
-  Future<List<Map<String, dynamic>>> getSeries({int? categoryId}) async {
+  Future<List<Map<String, dynamic>>> getSeries({
+    int? categoryId,
+    bool forceRefresh = false,
+  }) async {
     try {
-      var url = '$_baseUrl&action=get_series';
-      if (categoryId != null) {
-        url += '&category_id=$categoryId';
-      }
       return await _getListWithCache(
-        url,
+        action: 'get_series',
+        categoryId: categoryId,
         options: Options(receiveTimeout: const Duration(seconds: 60)),
+        ttl: _categoryItemsTtl,
+        forceRefresh: forceRefresh,
       );
     } catch (e) {
-      debugPrint('getSeries error: $e');
+      debugPrint('[XtreamApi] getSeries error: $e');
       return [];
     }
   }
 
   Future<Map<String, dynamic>> getSeriesInfo(int seriesId) async {
-    final url = '$_baseUrl&action=get_series_info&series_id=$seriesId';
     try {
-      final response = await _dio.get(url);
+      final response = await DomainManager.instance.executeWithFailover(
+        (domain) => _dio.get(
+          '${_buildBaseUrl(domain)}&action=get_series_info&series_id=$seriesId',
+        ),
+      );
+      _updateServerUrlFromResponse(response);
       if (response.data is Map) {
         return Map<String, dynamic>.from(response.data as Map);
       }
-      return <String, dynamic>{};
+      return {};
     } catch (e) {
-      debugPrint('getSeriesInfo error: $e');
-      return <String, dynamic>{};
+      debugPrint('[XtreamApi] getSeriesInfo error: $e');
+      return {};
     }
   }
 
   Future<Map<String, dynamic>> getVodInfo(int vodId) async {
-    final url = '$_baseUrl&action=get_vod_info&vod_id=$vodId';
     try {
-      final response = await _dio.get(url);
+      final response = await DomainManager.instance.executeWithFailover(
+        (domain) => _dio.get(
+          '${_buildBaseUrl(domain)}&action=get_vod_info&vod_id=$vodId',
+        ),
+      );
+      _updateServerUrlFromResponse(response);
       if (response.data is Map) {
         return Map<String, dynamic>.from(response.data as Map);
       }
-      return <String, dynamic>{};
+      return {};
     } catch (e) {
-      debugPrint('getVodInfo error: $e');
-      return <String, dynamic>{};
+      debugPrint('[XtreamApi] getVodInfo error: $e');
+      return {};
     }
   }
+
+  // ─── Core fetch with cache + failover ─────────────────────────────────────
+
+  Future<List<Map<String, dynamic>>> _getListWithCache({
+    required String action,
+    int? categoryId,
+    Options? options,
+    Duration ttl = _categoryItemsTtl,
+    bool forceRefresh = false,
+  }) async {
+    final cacheKey = _buildCacheKey(action, categoryId);
+
+    final cached = _memoryResponseCache[cacheKey];
+    if (!forceRefresh && cached != null && !cached.isExpired) {
+      return cached.data.map((e) => Map<String, dynamic>.from(e)).toList();
+    }
+
+    final response = await DomainManager.instance.executeWithFailover(
+      (domain) {
+        var url = '${_buildBaseUrl(domain)}&action=$action';
+        if (categoryId != null) url += '&category_id=$categoryId';
+        return _dio.get(url, options: options);
+      },
+    );
+
+    // If the domain manager switched to a fallback, keep our _serverUrl in sync.
+    _updateServerUrlFromResponse(response);
+
+    final parsed = _parseList(response.data);
+    _memoryResponseCache[cacheKey] = _MemoryCacheEntry(
+      data: parsed.map((e) => Map<String, dynamic>.from(e)).toList(),
+      cachedAt: DateTime.now(),
+      ttl: ttl,
+    );
+    return parsed;
+  }
+
+  String _buildCacheKey(String action, int? categoryId) {
+    // Use action + optional categoryId as key (domain-agnostic so a cache hit
+    // from a previous domain is still valid after a failover switch).
+    return categoryId != null ? '$action:$categoryId' : action;
+  }
+
+  /// If a failover switched the active domain, update our local _serverUrl.
+  void _updateServerUrlFromResponse(Response<dynamic> response) {
+    final activeDomain = DomainManager.instance.activeDomain;
+    if (_serverUrl != activeDomain) {
+      debugPrint(
+        '[XtreamApi] Domain switched: $_serverUrl => $activeDomain',
+      );
+      _serverUrl = activeDomain;
+    }
+  }
+
+  // ─── Parsing ───────────────────────────────────────────────────────────────
 
   List<Map<String, dynamic>> _parseList(dynamic data) {
     if (data == null) return [];
@@ -218,23 +367,34 @@ class XtreamApi {
       return data.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList();
     }
     if (data is Map) {
-      return data.values.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList();
+      final asMap = Map<String, dynamic>.from(data);
+      if (asMap.values.every((v) => v is! Map)) {
+        return [asMap];
+      }
+      return asMap.values.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList();
     }
     return [];
   }
 
-  Future<List<Map<String, dynamic>>> _getListWithCache(
-    String url, {
-    Options? options,
-  }) async {
-    final cached = _memoryResponseCache[url];
-    if (cached is List<Map<String, dynamic>>) {
-      return cached.map((item) => Map<String, dynamic>.from(item)).toList();
-    }
+  // ─── Status descriptions ───────────────────────────────────────────────────
 
-    final response = await _dio.get(url, options: options);
-    final parsed = _parseList(response.data);
-    _memoryResponseCache[url] = parsed.map((item) => Map<String, dynamic>.from(item)).toList();
-    return parsed;
+  static String _statusDescription(int code) {
+    switch (code) {
+      case 200:
+        return 'OK';
+      case 403:
+        return 'Forbidden (blocked or invalid credentials)';
+      case 455:
+        return 'IP Not Allowed';
+      case 458:
+        return 'User already connected with different IP';
+      case 464:
+        return 'DNS Locked';
+      case 511:
+      case 512:
+        return 'Authentication does not exist';
+      default:
+        return 'HTTP $code';
+    }
   }
 }

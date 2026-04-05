@@ -1,5 +1,3 @@
-// import 'dart:convert';
-import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -527,24 +525,40 @@ class _AddProfileDialogState extends State<_AddProfileDialog> {
     setState(() => _isLoading = true);
 
     try {
-      final dio = Dio();
-      final prefs = await SharedPreferences.getInstance();
-      final url = 'http://rawadiptv.online/player_api.php'
-          '?username=$username&password=$password'
-          '&action=get_account_info';
+      // authenticate() tries all configured domains in priority order and
+      // automatically persists the fastest/working one via DomainManager.
+      final result = await _api.authenticate(
+        AppConstants.serverUrl,
+        username,
+        password,
+      );
 
-      final response = await dio.get(url);
+      if (!result['success']) {
+        debugPrint('[Login] Authentication failed: ${result['message']}');
+        if (!mounted) return;
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(result['message'] as String? ?? 'Login failed'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 5),
+          ),
+        );
+        return;
+      }
 
-      final data = response.data as Map<String, dynamic>;
+      final data = result['data'] as Map<String, dynamic>;
       final userInfo = data['user_info'] as Map<String, dynamic>?;
 
       if (userInfo == null) {
+        debugPrint('[Login] No user_info in response: $data');
         throw Exception('Invalid credentials');
       }
 
+      final prefs = await SharedPreferences.getInstance();
       await prefs.setString('username', username);
       await prefs.setString('password', password);
-      await prefs.setString('server_url', 'http://rawadiptv.online');
+      await prefs.setString('server_url', AppConstants.serverUrl);
 
       final parsedUserInfo = UserInfo.fromJson(
         data,
@@ -584,13 +598,15 @@ class _AddProfileDialogState extends State<_AddProfileDialog> {
           ),
         ),
       );
-    } catch (_) {
+    } catch (e) {
+      debugPrint('[Login] Unexpected error: $e');
       if (!mounted) return;
       setState(() => _isLoading = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Invalid username or password'),
+        SnackBar(
+          content: Text('Login failed: $e'),
           backgroundColor: Colors.red,
+          duration: const Duration(seconds: 5),
         ),
       );
     }
