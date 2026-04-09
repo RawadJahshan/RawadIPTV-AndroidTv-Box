@@ -30,9 +30,8 @@ class LivePlayerViewFactory(
 /**
  * Thin wrapper around [PlayerView] exposed as a Flutter PlatformView.
  *
- * The view registers a listener on [LivePlayerManager] so that when the
- * ExoPlayer instance is recreated (e.g. pipeline recovery), the view
- * automatically reattaches to the new player.
+ * The manager enforces that only one [PlayerView] is attached to the player at
+ * a time, which prevents duplicate native surfaces during fullscreen toggles.
  */
 class LivePlayerPlatformView(
     context: Context,
@@ -49,17 +48,12 @@ class LivePlayerPlatformView(
         setShowBuffering(PlayerView.SHOW_BUFFERING_NEVER)        // Flutter renders the spinner
         keepScreenOn = true
         resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT      // BoxFit.contain equivalent
-    }
-
-    /** Callback invoked by [LivePlayerManager] when the player is (re)created. */
-    private val reattachListener: () -> Unit = {
-        Log.d(TAG, "[$viewId] reattaching to new player instance")
-        playerView.player = playerManager.getPlayer()
+        isFocusable = false
+        isFocusableInTouchMode = false
     }
 
     init {
-        playerManager.addViewListener(reattachListener)
-        playerView.player = playerManager.getPlayer()
+        playerManager.attachPlayerView(playerView)
         Log.d(TAG, "[$viewId] created, player attached=${playerView.player != null}")
     }
 
@@ -67,7 +61,6 @@ class LivePlayerPlatformView(
 
     override fun dispose() {
         Log.d(TAG, "[$viewId] disposed")
-        playerManager.removeViewListener(reattachListener)
-        playerView.player = null
+        playerManager.detachPlayerView(playerView)
     }
 }

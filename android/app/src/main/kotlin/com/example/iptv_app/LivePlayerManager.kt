@@ -16,6 +16,7 @@ import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import androidx.media3.ui.PlayerView
 import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
@@ -27,8 +28,7 @@ import io.flutter.plugin.common.MethodChannel
  * State events are pushed to Flutter via [EventChannel].
  *
  * The player survives PlatformView recreation (e.g. fullscreen toggle) because
- * the view only holds a reference obtained through [getPlayer] and reattaches
- * via [addViewListener].
+ * the active [PlayerView] is reattached to the same singleton player.
  */
 class LivePlayerManager(
     private val context: Context,
@@ -45,11 +45,40 @@ class LivePlayerManager(
     /** Currently-active ExoPlayer, or null before [initialize]/after [release]. */
     fun getPlayer(): ExoPlayer? = player
 
-    /** Register a callback that fires when the player instance is (re)created. */
-    fun addViewListener(listener: () -> Unit) { viewListeners.add(listener) }
+    /**
+     * Attach [playerView] as the sole active rendering surface.
+     *
+     * If Flutter recreates the PlatformView during fullscreen transitions, the
+     * previous view is detached first so the player never renders into two
+     * native surfaces at the same time.
+     */
+    fun attachPlayerView(playerView: PlayerView) {
+        if (attachedPlayerView === playerView) {
+            if (playerView.player !== player) {
+                playerView.player = player
+            }
+            return
+        }
 
-    /** Remove a previously-registered view listener. */
-    fun removeViewListener(listener: () -> Unit) { viewListeners.remove(listener) }
+        attachedPlayerView?.player = null
+        attachedPlayerView = playerView
+        playerView.player = player
+        Log.d(TAG, "attachPlayerView: attached=${player != null}")
+    }
+
+    /** Detach [playerView] if it currently owns the active rendering surface. */
+    fun detachPlayerView(playerView: PlayerView) {
+        if (attachedPlayerView === playerView) {
+            playerView.player = null
+            attachedPlayerView = null
+            Log.d(TAG, "detachPlayerView")
+            return
+        }
+
+        if (playerView.player != null) {
+            playerView.player = null
+        }
+    }
 
     /** [EventChannel.StreamHandler] that Flutter subscribes to. */
     val eventStreamHandler = object : EventChannel.StreamHandler {
@@ -101,7 +130,7 @@ class LivePlayerManager(
     private var eventSink: EventChannel.EventSink? = null
     private val mainHandler = Handler(Looper.getMainLooper())
     private var isFirstFrame = false
-    private val viewListeners = mutableListOf<() -> Unit>()
+    private var attachedPlayerView: PlayerView? = null
 
     /**
      * Shared [DefaultHttpDataSource.Factory] whose default request properties
@@ -159,8 +188,8 @@ class LivePlayerManager(
                 addListener(playerListener)
             }
 
-        // Notify platform views so they attach the new player surface.
-        viewListeners.forEach { it() }
+        // Reattach the sole active surface to the new player instance.
+        attachedPlayerView?.player = player
 
         // Start heartbeat.
         mainHandler.removeCallbacks(heartbeatRunnable)
@@ -206,6 +235,7 @@ class LivePlayerManager(
         Log.d(TAG, "release")
         mainHandler.removeCallbacks(heartbeatRunnable)
         player?.removeListener(playerListener)
+        attachedPlayerView?.player = null
         player?.release()
         player = null
         isFirstFrame = false
