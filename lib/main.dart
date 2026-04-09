@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:media_kit/media_kit.dart';
 import 'data/datasources/remote/xtream_api.dart';
 import 'data/services/domain_manager.dart';
 import 'data/services/profile_service.dart';
@@ -14,7 +13,6 @@ void main() async {
     DeviceOrientation.landscapeLeft,
     DeviceOrientation.landscapeRight,
   ]);
-  MediaKit.ensureInitialized();
   // Restore the last-known-working domain before any API calls are made.
   await DomainManager.instance.init();
   runApp(const MyApp());

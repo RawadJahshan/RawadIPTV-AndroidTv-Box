@@ -2,13 +2,12 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:media_kit/media_kit.dart';
-import 'package:media_kit_video/media_kit_video.dart';
 
 import '../../../data/datasources/remote/xtream_api.dart';
 import '../../../data/models/channel.dart';
 import '../../../data/models/live_tv_category.dart';
 import '../../../data/services/catalog_cache_service.dart';
+import '../../../data/services/native_live_player.dart';
 import '../../../utils/favorites_manager.dart';
 
 class ChannelsDetailScreen extends StatefulWidget {
@@ -32,8 +31,14 @@ enum _LiveTvFocusArea { channelList, playerPanel, retryPanel }
 class _ChannelsDetailScreenState extends State<ChannelsDetailScreen> {
   late Future<List<Channel>> _channelsFuture;
   int _selectedChannelIndex = 0;
-  Player? _player;
-  VideoController? _controller;
+
+  // ── Native ExoPlayer integration ──────────────────────────────────
+  NativeLivePlayer? _nativePlayer;
+  bool _playerInitialized = false;
+  // Stable identity for the AndroidView so the platform view survives
+  // ancestor rebuilds (e.g. entering/leaving fullscreen).
+  final GlobalKey _videoViewKey = GlobalKey(debugLabel: 'LiveTvVideoView');
+
   bool _isFavorite = false;
   bool _isBuffering = false;
   bool _hasError = false;
@@ -62,16 +67,19 @@ class _ChannelsDetailScreenState extends State<ChannelsDetailScreen> {
   _LiveTvFocusArea _lastMainFocusArea = _LiveTvFocusArea.channelList;
   _LiveTvFocusArea _focusBeforeRetry = _LiveTvFocusArea.channelList;
 
+  bool _overlayVisible = false;
+  Timer? _overlayHideTimer;
+
   StreamSubscription<bool>? _bufferingSubscription;
-  StreamSubscription? _videoParamsSubscription;
-  StreamSubscription? _tracksSubscription;
+  StreamSubscription? _videoSizeSubscription;
+  StreamSubscription<double>? _fpsSubscription;
   StreamSubscription<String>? _errorSubscription;
   StreamSubscription<bool>? _playingSubscription;
-  StreamSubscription<Duration>? _positionSubscription;
+  StreamSubscription<int>? _positionSubscription;
+  StreamSubscription<void>? _firstFrameSubscription;
   Timer? _fallbackTimer;
   Timer? _retryTimer;
   Timer? _watchdogTimer;
-  Duration _lastPosition = Duration.zero;
   DateTime _lastProgressAt = DateTime.now();
   bool _isPlaying = false;
   bool _didRecoverPlaybackPipeline = false;
@@ -88,6 +96,7 @@ class _ChannelsDetailScreenState extends State<ChannelsDetailScreen> {
   void initState() {
     super.initState();
     _forceLandscape();
+    _nativePlayer = NativeLivePlayer();
     _initializePlaybackPipeline();
     _channelsFuture = _loadChannels();
   }
@@ -98,76 +107,85 @@ class _ChannelsDetailScreenState extends State<ChannelsDetailScreen> {
     _forceLandscape();
   }
 
-  void _initializePlaybackPipeline() {
+  // ── Player pipeline setup ─────────────────────────────────────────
+
+  Future<void> _initializePlaybackPipeline() async {
     _clearPlayerSubscriptions();
-    _player?.dispose();
+    _watchdogTimer?.cancel();
 
-    final player = Player(
-      configuration: const PlayerConfiguration(
-        bufferSize: 48 * 1024 * 1024,
-        logLevel: MPVLogLevel.warn,
-      ),
-    );
-    _player = player;
+    final player = _nativePlayer;
+    if (player == null) return;
 
-    _controller = VideoController(
-      player,
-      configuration: const VideoControllerConfiguration(
-        enableHardwareAcceleration: true,
-        androidAttachSurfaceAfterVideoParameters: false,
-      ),
-    );
+    await player.initialize();
 
-    _bufferingSubscription = player.stream.buffering.listen((buffering) {
+    if (mounted) {
+      setState(() => _playerInitialized = true);
+    } else {
+      _playerInitialized = true;
+    }
+
+    _bufferingSubscription = player.bufferingStream.listen((buffering) {
       if (!mounted) return;
       setState(() => _isBuffering = buffering && !_hasVideoFrame && !_hasError);
     });
 
-    _videoParamsSubscription = player.stream.videoParams.listen((params) {
-      if (!mounted || params.w == null || params.h == null) return;
+    _videoSizeSubscription = player.videoSizeStream.listen((size) {
+      if (!mounted) return;
       _fallbackTimer?.cancel();
       _retryTimer?.cancel();
+      // Frame delivery == liveness signal for the watchdog.
+      _lastProgressAt = DateTime.now();
+      // Allow the recovery path to run again on the next stall.
+      _didRecoverPlaybackPipeline = false;
       setState(() {
         _hasVideoFrame = true;
-        _resolution = '${params.w}x${params.h}';
+        _resolution = '${size.width}x${size.height}';
         _hasError = false;
         _isBuffering = false;
         _retryCount = 0;
       });
+      _showOverlayBriefly();
       _focusRecoveryAfterPlaybackResumes();
-      debugPrint('[LiveTV] video params ready: ${params.w}x${params.h}');
+      debugPrint('[LiveTV] video size ready: ${size.width}x${size.height}');
     });
 
-    _tracksSubscription = player.stream.tracks.listen((tracks) {
-      if (!mounted || tracks.video.isEmpty) return;
-      for (final track in tracks.video) {
-        if (track.fps != null && track.fps! > 0) {
-          setState(() {
-            _fps = '${track.fps!.toStringAsFixed(0)} FPS';
-          });
-          break;
-        }
-      }
+    _fpsSubscription = player.fpsStream.listen((fps) {
+      if (!mounted) return;
+      _lastProgressAt = DateTime.now();
+      setState(() {
+        _fps = '${fps.toStringAsFixed(0)} FPS';
+      });
     });
 
-    _errorSubscription = player.stream.error.listen((error) {
-      if (!mounted || error.isEmpty) return;
-      debugPrint('Player error: $error');
+    _errorSubscription = player.errorStream.listen((error) {
+      if (!mounted) return;
+      debugPrint('[LiveTV] player error: $error');
       _handleError();
     });
 
-    _playingSubscription = player.stream.playing.listen((playing) {
+    _playingSubscription = player.playingStream.listen((playing) {
       _isPlaying = playing;
+      if (playing) _lastProgressAt = DateTime.now();
       debugPrint(
         '[LiveTV] state playing=$playing buffering=$_isBuffering hasVideo=$_hasVideoFrame',
       );
     });
 
-    _positionSubscription = player.stream.position.listen((position) {
-      if (position > _lastPosition) {
-        _lastPosition = position;
-        _lastProgressAt = DateTime.now();
+    _positionSubscription = player.positionStream.listen((positionMs) {
+      _lastProgressAt = DateTime.now();
+    });
+
+    _firstFrameSubscription = player.firstFrameStream.listen((_) {
+      if (!mounted) return;
+      _lastProgressAt = DateTime.now();
+      if (!_hasVideoFrame) {
+        setState(() {
+          _hasVideoFrame = true;
+          _hasError = false;
+          _isBuffering = false;
+        });
       }
+      debugPrint('[LiveTV] first frame rendered');
     });
 
     _watchdogTimer = Timer.periodic(const Duration(seconds: 10), (_) {
@@ -182,18 +200,19 @@ class _ChannelsDetailScreenState extends State<ChannelsDetailScreen> {
 
   void _clearPlayerSubscriptions() {
     _bufferingSubscription?.cancel();
-    _videoParamsSubscription?.cancel();
-    _tracksSubscription?.cancel();
+    _videoSizeSubscription?.cancel();
+    _fpsSubscription?.cancel();
     _errorSubscription?.cancel();
     _playingSubscription?.cancel();
     _positionSubscription?.cancel();
+    _firstFrameSubscription?.cancel();
   }
 
   Future<void> _recoverPlaybackPipeline(Channel channel) async {
     if (_didRecoverPlaybackPipeline || !mounted) return;
     _didRecoverPlaybackPipeline = true;
     debugPrint('[LiveTV] recovering playback pipeline and retrying stream...');
-    _initializePlaybackPipeline();
+    await _initializePlaybackPipeline();
     await _playStream(channel);
   }
 
@@ -244,6 +263,8 @@ class _ChannelsDetailScreenState extends State<ChannelsDetailScreen> {
     });
   }
 
+  // ── Channel data ──────────────────────────────────────────────────
+
   Future<List<Channel>> _loadChannels() async {
     var rawChannels = await CatalogCacheService.getLiveStreamsByCategory(
       widget.profileId,
@@ -271,14 +292,15 @@ class _ChannelsDetailScreenState extends State<ChannelsDetailScreen> {
         .toList();
   }
 
+  // ── Playback ──────────────────────────────────────────────────────
+
   Future<void> _playStream(Channel channel) async {
-    final player = _player;
+    final player = _nativePlayer;
     if (player == null) return;
     _fallbackTimer?.cancel();
     _retryTimer?.cancel();
     _usingM3u8 = false;
     _retryCount = 0;
-    _lastPosition = Duration.zero;
     _lastProgressAt = DateTime.now();
 
     if (mounted) {
@@ -294,10 +316,7 @@ class _ChannelsDetailScreenState extends State<ChannelsDetailScreen> {
 
     debugPrint('[LiveTV] opening TS stream: ${channel.streamUrl}');
     try {
-      await player.open(
-        Media(channel.streamUrl, httpHeaders: _streamHttpHeaders),
-        play: true,
-      );
+      await player.play(channel.streamUrl, headers: _streamHttpHeaders);
 
       _fallbackTimer = Timer(const Duration(seconds: 8), () {
         if (mounted && !_hasVideoFrame && !_hasError) {
@@ -315,7 +334,6 @@ class _ChannelsDetailScreenState extends State<ChannelsDetailScreen> {
     if (!mounted) return;
     _fallbackTimer?.cancel();
     _usingM3u8 = true;
-    _lastPosition = Duration.zero;
     _lastProgressAt = DateTime.now();
 
     debugPrint('[LiveTV] trying m3u8: ${channel.streamUrlM3u8}');
@@ -327,12 +345,9 @@ class _ChannelsDetailScreenState extends State<ChannelsDetailScreen> {
     });
 
     try {
-      final player = _player;
+      final player = _nativePlayer;
       if (player == null) return;
-      await player.open(
-        Media(channel.streamUrlM3u8, httpHeaders: _streamHttpHeaders),
-        play: true,
-      );
+      await player.play(channel.streamUrlM3u8, headers: _streamHttpHeaders);
 
       _fallbackTimer = Timer(const Duration(seconds: 8), () {
         if (mounted && !_hasVideoFrame) {
@@ -344,6 +359,8 @@ class _ChannelsDetailScreenState extends State<ChannelsDetailScreen> {
       _showRetryError('Stream unavailable');
     }
   }
+
+  // ── Favorites ─────────────────────────────────────────────────────
 
   Future<void> _loadFavoriteStatus(String channelId) async {
     final fav = await FavoritesManager.isFavorite(channelId);
@@ -363,6 +380,8 @@ class _ChannelsDetailScreenState extends State<ChannelsDetailScreen> {
     }
   }
 
+  // ── Channel switching ─────────────────────────────────────────────
+
   Future<void> _onChannelSelected(Channel channel, int index) async {
     if (_selectedChannelIndex == index) return;
     setState(() {
@@ -373,6 +392,7 @@ class _ChannelsDetailScreenState extends State<ChannelsDetailScreen> {
       _fps = '';
     });
     _didRecoverPlaybackPipeline = false;
+    _showOverlayBriefly();
     await _playStream(channel);
     await _loadFavoriteStatus(channel.id.toString());
   }
@@ -394,6 +414,18 @@ class _ChannelsDetailScreenState extends State<ChannelsDetailScreen> {
     await _playStream(initial);
     await _loadFavoriteStatus(initial.id.toString());
   }
+
+  Future<void> _switchChannelRelative(int delta) async {
+    final channels = await _channelsFuture;
+    if (channels.isEmpty) return;
+    final next =
+        (_selectedChannelIndex + delta).clamp(0, channels.length - 1);
+    if (next == _selectedChannelIndex) return;
+    await _onChannelSelected(channels[next], next);
+    _showOverlayBriefly();
+  }
+
+  // ── Focus management ──────────────────────────────────────────────
 
   void _ensureChannelFocusNodes(int length) {
     if (_channelItemFocusNodes.length == length) return;
@@ -443,6 +475,8 @@ class _ChannelsDetailScreenState extends State<ChannelsDetailScreen> {
     });
   }
 
+  // ── Fullscreen ────────────────────────────────────────────────────
+
   void _enterFullscreenMode() {
     if (_isFullscreen || !mounted) return;
     setState(() => _isFullscreen = true);
@@ -460,6 +494,20 @@ class _ChannelsDetailScreenState extends State<ChannelsDetailScreen> {
       _requestPlayerPanelFocus();
     });
   }
+
+  // ── Overlay ───────────────────────────────────────────────────────
+
+  void _showOverlayBriefly() {
+    if (!mounted) return;
+    _overlayHideTimer?.cancel();
+    setState(() => _overlayVisible = true);
+    _overlayHideTimer = Timer(const Duration(seconds: 4), () {
+      if (!mounted) return;
+      setState(() => _overlayVisible = false);
+    });
+  }
+
+  // ── Key handlers ──────────────────────────────────────────────────
 
   KeyEventResult _onScreenKeyEvent(FocusNode node, KeyEvent event) {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
@@ -514,12 +562,15 @@ class _ChannelsDetailScreenState extends State<ChannelsDetailScreen> {
     return KeyEventResult.ignored;
   }
 
+  // ── Dispose ───────────────────────────────────────────────────────
+
   @override
   void dispose() {
     _forceLandscape();
     _fallbackTimer?.cancel();
     _retryTimer?.cancel();
     _watchdogTimer?.cancel();
+    _overlayHideTimer?.cancel();
     _clearPlayerSubscriptions();
     for (final node in _channelItemFocusNodes) {
       node.dispose();
@@ -528,11 +579,17 @@ class _ChannelsDetailScreenState extends State<ChannelsDetailScreen> {
     _favoriteButtonFocusNode.dispose();
     _retryButtonFocusNode.dispose();
     _backButtonFocusNode.dispose();
-    _screenFocusScope.dispose();
+    // _screenFocusScope is owned by the FocusScope widget that takes it via
+    // node:; that widget disposes it for us.
     _channelScrollController.dispose();
-    _player?.dispose();
+    // Release the native ExoPlayer and tear down Dart-side streams.
+    _nativePlayer?.release();
+    _nativePlayer?.dispose();
+    _nativePlayer = null;
     super.dispose();
   }
+
+  // ── Build ─────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
@@ -776,13 +833,44 @@ class _ChannelsDetailScreenState extends State<ChannelsDetailScreen> {
                               },
                               onKeyEvent: (_, event) {
                                 if (event is! KeyDownEvent) return KeyEventResult.ignored;
+                                // Fullscreen-only D-pad bindings: channel
+                                // up/down + back-to-windowed.
+                                if (_isFullscreen) {
+                                  if (event.logicalKey ==
+                                          LogicalKeyboardKey.arrowUp ||
+                                      event.logicalKey ==
+                                          LogicalKeyboardKey.channelUp) {
+                                    _switchChannelRelative(-1);
+                                    return KeyEventResult.handled;
+                                  }
+                                  if (event.logicalKey ==
+                                          LogicalKeyboardKey.arrowDown ||
+                                      event.logicalKey ==
+                                          LogicalKeyboardKey.channelDown) {
+                                    _switchChannelRelative(1);
+                                    return KeyEventResult.handled;
+                                  }
+                                  if (event.logicalKey ==
+                                          LogicalKeyboardKey.escape ||
+                                      event.logicalKey ==
+                                          LogicalKeyboardKey.goBack) {
+                                    _exitFullscreenMode();
+                                    return KeyEventResult.handled;
+                                  }
+                                  if (event.logicalKey ==
+                                          LogicalKeyboardKey.select ||
+                                      event.logicalKey ==
+                                          LogicalKeyboardKey.enter) {
+                                    _showOverlayBriefly();
+                                    return KeyEventResult.handled;
+                                  }
+                                  return KeyEventResult.ignored;
+                                }
                                 if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
-                                  if (_isFullscreen) return KeyEventResult.handled;
                                   _requestChannelFocus(_selectedChannelIndex);
                                   return KeyEventResult.handled;
                                 }
                                 if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
-                                  if (_isFullscreen) return KeyEventResult.handled;
                                   _favoriteButtonFocusNode.requestFocus();
                                   return KeyEventResult.handled;
                                 }
@@ -813,32 +901,16 @@ class _ChannelsDetailScreenState extends State<ChannelsDetailScreen> {
                                       ),
                                       child: Stack(
                                         children: [
+                                        // ── Native ExoPlayer surface ──
                                         SizedBox.expand(
-                                          child: _controller == null
-                                              ? const SizedBox.shrink()
-                                              : Video(
-                                                  controller: _controller!,
-                                                  fit: BoxFit.contain,
-                                                  onEnterFullscreen: () async {
-                                                    await SystemChrome.setEnabledSystemUIMode(
-                                                      SystemUiMode.immersiveSticky,
-                                                    );
-                                                    await SystemChrome.setPreferredOrientations([
-                                                      DeviceOrientation.landscapeLeft,
-                                                      DeviceOrientation.landscapeRight,
-                                                    ]);
-                                                  },
-                                                  onExitFullscreen: () async {
-                                                    await SystemChrome.setEnabledSystemUIMode(
-                                                      SystemUiMode.manual,
-                                                      overlays: SystemUiOverlay.values,
-                                                    );
-                                                    await SystemChrome.setPreferredOrientations([
-                                                      DeviceOrientation.landscapeLeft,
-                                                      DeviceOrientation.landscapeRight,
-                                                    ]);
-                                                  },
-                                                ),
+                                          child: _playerInitialized
+                                              ? AndroidView(
+                                                  key: _videoViewKey,
+                                                  viewType: 'rawad_iptv/live_player_view',
+                                                  creationParamsCodec:
+                                                      const StandardMessageCodec(),
+                                                )
+                                              : const ColoredBox(color: Colors.black),
                                         ),
                                         if (_isBuffering && !_hasError)
                                           Container(
@@ -917,6 +989,145 @@ class _ChannelsDetailScreenState extends State<ChannelsDetailScreen> {
                                               ),
                                             ),
                                           ),
+                                        // Fullscreen-only bottom overlay
+                                        // (gradient + name + chips). Reuses
+                                        // _overlayVisible / _showOverlayBriefly
+                                        // which already fires on entering
+                                        // fullscreen and on channel switch.
+                                        if (_isFullscreen)
+                                          Positioned(
+                                            left: 0,
+                                            right: 0,
+                                            bottom: 0,
+                                            child: IgnorePointer(
+                                              child: AnimatedOpacity(
+                                                opacity:
+                                                    _overlayVisible ? 1.0 : 0.0,
+                                                duration: const Duration(
+                                                    milliseconds: 300),
+                                                child: Container(
+                                                  padding: const EdgeInsets
+                                                      .symmetric(
+                                                    horizontal: 40,
+                                                    vertical: 24,
+                                                  ),
+                                                  decoration: BoxDecoration(
+                                                    gradient: LinearGradient(
+                                                      begin: Alignment
+                                                          .bottomCenter,
+                                                      end:
+                                                          Alignment.topCenter,
+                                                      colors: [
+                                                        Colors.black.withValues(
+                                                            alpha: 0.9),
+                                                        Colors.black.withValues(
+                                                            alpha: 0.0),
+                                                      ],
+                                                    ),
+                                                  ),
+                                                  child: Column(
+                                                    mainAxisSize:
+                                                        MainAxisSize.min,
+                                                    crossAxisAlignment:
+                                                        CrossAxisAlignment
+                                                            .start,
+                                                    children: [
+                                                      Text(
+                                                        selectedChannel.name,
+                                                        style: const TextStyle(
+                                                          color: Colors.white,
+                                                          fontSize: 28,
+                                                          fontWeight:
+                                                              FontWeight.bold,
+                                                        ),
+                                                      ),
+                                                      const SizedBox(
+                                                          height: 12),
+                                                      Row(
+                                                        children: [
+                                                          if (_resolution
+                                                              .isNotEmpty)
+                                                            _buildOverlayChip(
+                                                                _resolution),
+                                                          if (_resolution
+                                                                  .isNotEmpty &&
+                                                              _fps.isNotEmpty)
+                                                            const SizedBox(
+                                                                width: 12),
+                                                          if (_fps.isNotEmpty)
+                                                            _buildOverlayChip(
+                                                                _fps),
+                                                        ],
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                        // Channel-info overlay (name +
+                                        // resolution + FPS), auto-hidden.
+                                        // Hidden in fullscreen — replaced by
+                                        // the bottom gradient overlay above.
+                                        if (!_isFullscreen) Positioned(
+                                          left: 16,
+                                          top: 16,
+                                          child: IgnorePointer(
+                                            child: AnimatedOpacity(
+                                              opacity: _overlayVisible ? 1 : 0,
+                                              duration: const Duration(
+                                                  milliseconds: 220),
+                                              child: Container(
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                  horizontal: 14,
+                                                  vertical: 10,
+                                                ),
+                                                decoration: BoxDecoration(
+                                                  color: Colors.black
+                                                      .withValues(alpha: 0.6),
+                                                  borderRadius:
+                                                      BorderRadius.circular(8),
+                                                ),
+                                                child: Column(
+                                                  mainAxisSize:
+                                                      MainAxisSize.min,
+                                                  crossAxisAlignment:
+                                                      CrossAxisAlignment.start,
+                                                  children: [
+                                                    Text(
+                                                      selectedChannel.name,
+                                                      style: const TextStyle(
+                                                        color: Colors.white,
+                                                        fontSize: 18,
+                                                        fontWeight:
+                                                            FontWeight.bold,
+                                                      ),
+                                                    ),
+                                                    if (_resolution.isNotEmpty ||
+                                                        _fps.isNotEmpty) ...[
+                                                      const SizedBox(height: 4),
+                                                      Text(
+                                                        [
+                                                          if (_resolution
+                                                              .isNotEmpty)
+                                                            _resolution,
+                                                          if (_fps.isNotEmpty)
+                                                            _fps,
+                                                          if (_usingM3u8) 'HLS',
+                                                        ].join('  •  '),
+                                                        style: const TextStyle(
+                                                          color: Colors.white70,
+                                                          fontSize: 13,
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ],
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                        ),
                                         if (_hasError)
                                           _buildRetryOverlay(channels),
                                         ],
@@ -1219,6 +1430,25 @@ class _ChannelsDetailScreenState extends State<ChannelsDetailScreen> {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildOverlayChip(String text) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.2),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.3)),
+      ),
+      child: Text(
+        text,
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 16,
+          fontWeight: FontWeight.bold,
         ),
       ),
     );
